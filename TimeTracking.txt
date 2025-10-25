@@ -1,0 +1,4 @@
+Noah McGlothlin :: 10/25/2025 12:20 am
+  -- researched different error-detection techniques for passing signals
+  -- end :: 10/25/2025 4:25 am
+
