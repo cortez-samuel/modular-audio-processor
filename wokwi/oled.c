@@ -126,7 +126,7 @@ void oled_init(void) {
     gpio_pull_up(SCL_PIN);
     sleep_ms(250);
 
-    oled_send_command(0xAE);
+    oled_send_command(0xAE); // Display off
     oled_send_command(0xDC); oled_send_command(0x00);
     oled_send_command(0x81); oled_send_command(0x2F);
     oled_send_command(0x20);
@@ -181,6 +181,14 @@ void oled_draw_text(uint8_t x, uint8_t y, const char *str) {
         x += 6;
         if (x + 5 >= OLED_WIDTH) break;
     }
+}
+
+// Border for the wave form
+void oled_draw_border(void){
+  for(int i = 0; i < 128; i++){
+    oled_set_pixel(i, 13, 1);
+    oled_set_pixel(i, 113, 1);
+  }
 }
 
 // Push framebuffer
