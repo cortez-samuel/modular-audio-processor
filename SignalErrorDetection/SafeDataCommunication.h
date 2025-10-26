@@ -5,9 +5,9 @@
 
 typedef uint16_t D_t;
 struct {
-    uint8_t dataErrorMasterPin;
-    uint8_t dataErrorSlavePin;
-    uint8_t maximumRetransmitCount;
+    uint8_t dataErrorMasterPin      = 27;
+    uint8_t dataErrorSlavePin       = 28;
+    uint8_t maximumRetransmitCount  = 255;
 } SafeDataCommunicationSettings;
 
 
