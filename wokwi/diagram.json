@@ -10,13 +10,31 @@
       "left": 3.6,
       "attrs": { "builder": "pico-sdk" }
     },
-    {
-      "type": "board-grove-oled-sh1107",
+    {"type": "board-grove-oled-sh1107",
       "id": "oled1",
-      "top": -201.83,
-      "left": -35.3,
-      "attrs": {}
-    }
+      "top": -211.43,
+      "left": 41.5,
+      "attrs": { "label": "Display 1 (OG Signal)" }},
+    {"type": "wokwi-potentiometer",
+      "id": "pot1",
+      "top": -97.3,
+      "left": -259.4,
+      "attrs": {"label": "Audio Input"}},
+    {"type": "wokwi-potentiometer",
+      "id": "pot2",
+      "top": -87.7,
+      "left": -134.6,
+      "attrs": {"label": "Cutoff Frequency"}},
+    {"type": "wokwi-pushbutton",
+      "id": "btn1",
+      "top": -176.2,
+      "left": -182.4,
+      "attrs": {"label": "Apply Filter Coefficient", "color": "red", "bounce": "1" }},
+    {"type": "board-grove-oled-sh1107",
+      "id": "oled2",
+      "top": -211.43,
+      "left": 195.1,
+      "attrs": { "label": "Display 1 (LPF Signal)"}}
   ],
   "connections": [
     [ "pico:GP0", "$serialMonitor:RX", "", [] ],
@@ -24,7 +42,19 @@
     [ "pico:GND.8", "oled1:GND.1", "black", [ "h91.2", "v-137.55" ] ],
     [ "oled1:VCC", "pico:VBUS", "red", [ "h28.8", "v108.75" ] ],
     [ "oled1:SDA", "pico:GP20", "orange", [ "h19.2", "v9.6" ] ],
-    [ "oled1:SCL.1", "pico:GP21", "gold", [ "h9.6", "v211.2" ] ]
+    [ "oled1:SCL.1", "pico:GP21", "gold", [ "h9.6", "v211.2" ] ],
+    ["pot1:GND", "pico:GND.8", "black", ["v0"]],
+    ["pot1:VCC", "pico:3V3", "red", ["v0"]],
+    ["pot1:SIG", "pico:GP26", "green", ["v0"]],
+    ["pot2:GND", "pico:GND.8", "black", ["v0"]],
+    ["pot2:VCC", "pico:3V3", "red", ["v0" ]],
+    ["pot2:SIG", "pico:GP27", "green", ["v0"]],
+    ["btn1:1", "pico:GND.8", "black", ["v0"]],
+    ["btn1:2", "pico:GP28", "green", ["v0"]],
+    ["oled2:GND.1", "pico:GND.3", "black", ["h-115.2", "v-128.85"]],
+    ["oled2:VCC", "pico:VBUS", "red", ["h-105.6", "v108.75"]],
+    ["oled2:SDA", "pico:GP18", "orange", ["h-96", "v-9.6"]],
+    ["oled2:SCL.1", "pico:GP19", "gold", ["h-86.4", "v201.6"]]
   ],
   "dependencies": {}
 }

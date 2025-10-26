@@ -2,10 +2,9 @@
 #include <string.h>
 #include <stdio.h>
 
-// Frame buffer
-static uint8_t framebuffer[OLED_WIDTH * OLED_HEIGHT / 8];
+static uint8_t framebuffer_0[OLED_WIDTH * OLED_HEIGHT / 8];
+static uint8_t framebuffer_1[OLED_WIDTH * OLED_HEIGHT / 8];
 
-// Font
 static const uint8_t font5x7[96][5] = {
     {0x00,0x00,0x00,0x00,0x00}, // ' '
     {0x00,0x00,0x5F,0x00,0x00}, // '!'
@@ -105,98 +104,112 @@ static const uint8_t font5x7[96][5] = {
 };
 
 // Helpers
-void oled_send_command(uint8_t cmd) {
+void oled_send_command(uint8_t id, uint8_t cmd) {
     uint8_t buf[2] = {0x00, cmd};
-    i2c_write_blocking(I2C_PORT, SH1107_ADDR, buf, 2, false);
+    i2c_inst_t* port = (id == 0) ? I2C0_PORT : I2C1_PORT;
+    i2c_write_blocking(port, SH1107_ADDR, buf, 2, false);
 }
 
-void oled_send_data(uint8_t *data, size_t len) {
+void oled_send_data(uint8_t id, uint8_t *data, size_t len) {
     uint8_t buf[len + 1];
     buf[0] = 0x40;
     memcpy(&buf[1], data, len);
-    i2c_write_blocking(I2C_PORT, SH1107_ADDR, buf, len + 1, false);
+    i2c_inst_t* port = (id == 0) ? I2C0_PORT : I2C1_PORT;
+    i2c_write_blocking(port, SH1107_ADDR, buf, len + 1, false);
 }
 
 // Init screen
-void oled_init(void) {
-    i2c_init(I2C_PORT, 400 * 1000);
-    gpio_set_function(SDA_PIN, GPIO_FUNC_I2C);
-    gpio_set_function(SCL_PIN, GPIO_FUNC_I2C);
-    gpio_pull_up(SDA_PIN);
-    gpio_pull_up(SCL_PIN);
+void oled_init(uint8_t id) {
+    if (id == 0) {
+        i2c_init(I2C0_PORT, 400 * 1000);
+        gpio_set_function(I2C0_SDA_PIN, GPIO_FUNC_I2C);
+        gpio_set_function(I2C0_SCL_PIN, GPIO_FUNC_I2C);
+        gpio_pull_up(I2C0_SDA_PIN);
+        gpio_pull_up(I2C0_SCL_PIN);
+    } else {
+        i2c_init(I2C1_PORT, 400 * 1000);
+        gpio_set_function(I2C1_SDA_PIN, GPIO_FUNC_I2C);
+        gpio_set_function(I2C1_SCL_PIN, GPIO_FUNC_I2C);
+        gpio_pull_up(I2C1_SDA_PIN);
+        gpio_pull_up(I2C1_SCL_PIN);
+    }
     sleep_ms(250);
 
-    oled_send_command(0xAE); // Display off
-    oled_send_command(0xDC); oled_send_command(0x00);
-    oled_send_command(0x81); oled_send_command(0x2F);
-    oled_send_command(0x20);
-    oled_send_command(0xA0);
-    oled_send_command(0xC0);
-    oled_send_command(0xA8); oled_send_command(0x7F);
-    oled_send_command(0xD3); oled_send_command(0x60);
-    oled_send_command(0xD5); oled_send_command(0x51);
-    oled_send_command(0xD9); oled_send_command(0x22);
-    oled_send_command(0xDB); oled_send_command(0x35);
-    oled_send_command(0xB0);
-    oled_send_command(0xDA); oled_send_command(0x12);
-    oled_send_command(0xA4);
-    oled_send_command(0xA6);
-    oled_send_command(0xAF);
+    oled_send_command(id, 0xAE); // Display off
+    oled_send_command(id, 0xDC); oled_send_command(id, 0x00);
+    oled_send_command(id, 0x81); oled_send_command(id, 0x2F);
+    oled_send_command(id, 0x20);
+    oled_send_command(id, 0xA0);
+    oled_send_command(id, 0xC0);
+    oled_send_command(id, 0xA8); oled_send_command(id, 0x7F);
+    oled_send_command(id, 0xD3); oled_send_command(id, 0x60);
+    oled_send_command(id, 0xD5); oled_send_command(id, 0x51);
+    oled_send_command(id, 0xD9); oled_send_command(id, 0x22);
+    oled_send_command(id, 0xDB); oled_send_command(id, 0x35);
+    oled_send_command(id, 0xB0);
+    oled_send_command(id, 0xDA); oled_send_command(id, 0x12);
+    oled_send_command(id, 0xA4);
+    oled_send_command(id, 0xA6);
+    oled_send_command(id, 0xAF);
 }
 
 // Fill buffer
-void oled_fill(uint8_t color) {
-    memset(framebuffer, color ? 0xFF : 0x00, sizeof(framebuffer));
+void oled_fill(uint8_t id, uint8_t color) {
+    uint8_t* fb = (id == 0) ? framebuffer_0 : framebuffer_1;
+    memset(fb, color ? 0xFF : 0x00, sizeof(framebuffer_0));
 }
 
 // Set pixel in buffer
-void oled_set_pixel(uint8_t x, uint8_t y, uint8_t value) {
+void oled_set_pixel(uint8_t id, uint8_t x, uint8_t y, uint8_t value) {
     if (x >= OLED_WIDTH || y >= OLED_HEIGHT) return;
+    
+    uint8_t* fb = (id == 0) ? framebuffer_0 : framebuffer_1;
     uint16_t index = x + (y / 8) * OLED_WIDTH;
     uint8_t bit = 1 << (y % 8);
 
     if (value)
-        framebuffer[index] |= bit;
+        fb[index] |= bit;
     else
-        framebuffer[index] &= ~bit;
+        fb[index] &= ~bit;
 }
 
 // Single ascii
-void oled_draw_char(uint8_t x, uint8_t y, char c) {
+void oled_draw_char(uint8_t id, uint8_t x, uint8_t y, char c) {
     if (c < 32 || c > 127) c = '?';
     const uint8_t *glyph = font5x7[c - 32];
     for (uint8_t i = 0; i < 5; i++) {
         uint8_t line = glyph[i];
         for (uint8_t j = 0; j < 7; j++) {
-            oled_set_pixel(x + i, y + j, line & 0x01);
+            oled_set_pixel(id, x + i, y + j, line & 0x01);
             line >>= 1;
         }
     }
 }
 
 // Text string
-void oled_draw_text(uint8_t x, uint8_t y, const char *str) {
+void oled_draw_text(uint8_t id, uint8_t x, uint8_t y, const char *str) {
     while (*str) {
-        oled_draw_char(x, y, *str++);
+        oled_draw_char(id, x, y, *str++);
         x += 6;
         if (x + 5 >= OLED_WIDTH) break;
     }
 }
 
 // Border for the wave form
-void oled_draw_border(void){
-  for(int i = 0; i < 128; i++){
-    oled_set_pixel(i, 13, 1);
-    oled_set_pixel(i, 113, 1);
-  }
+void oled_draw_border(uint8_t id){
+    for(int i = 0; i < 128; i++){
+        oled_set_pixel(id, i, 13, 1);
+        oled_set_pixel(id, i, 113, 1);
+    }
 }
 
 // Push framebuffer
-void oled_update(void) {
+void oled_update(uint8_t id) {
+    uint8_t* fb = (id == 0) ? framebuffer_0 : framebuffer_1;
     for (uint8_t page = 0; page < (OLED_HEIGHT / 8); page++) {
-        oled_send_command(0xB0 + page);      // Page address
-        oled_send_command(0x00);             // Lower column
-        oled_send_command(0x10);             // Higher column
-        oled_send_data(&framebuffer[page * OLED_WIDTH], OLED_WIDTH);
+        oled_send_command(id, 0xB0 + page);      // Page address
+        oled_send_command(id, 0x00);             // Lower column
+        oled_send_command(id, 0x10);             // Higher column
+        oled_send_data(id, &fb[page * OLED_WIDTH], OLED_WIDTH);
     }
 }
