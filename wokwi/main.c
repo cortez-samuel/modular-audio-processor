@@ -1,7 +1,10 @@
 #include "pico/stdlib.h"
 #include "hardware/adc.h"
 #include "hardware/gpio.h"
+#include <stdio.h>
+
 #include "oled.h"
+#include "SignalErrorDetection.h"
 
 float alpha = 0.5;
 float last_out = 0;
@@ -28,6 +31,9 @@ void draw_waveform(uint8_t id, int *buffer, int y_offset, const char* label){
     }
 }
 
+void testChecksum8();
+void testCRC8();
+
 int main(){
     stdio_init_all();
     adc_init();
@@ -45,6 +51,12 @@ int main(){
       input_buffer[i] = init_val;
       filter_buffer[i] = init_val;
     }
+
+
+    testChecksum8();
+    testCRC8();
+
+
     while(1){
         if(!gpio_get(28)){
             adc_select_input(1);
@@ -65,6 +77,68 @@ int main(){
         draw_waveform(1, filter_buffer, 5, "LPF");
         oled_update(0);
         oled_update(1);
-        sleep_ms(10);
+        sleep_ms(500);
     }
+}
+
+#include <stdlib.h>
+#include <time.h>
+void testChecksum8() {
+  uint32_t data = 0x0027A0FF;
+  uint32_t expectedEncoding = 0x27A1FF3A;
+  uint32_t encoding;
+  uint32_t badEncoding;
+  Checksum8__ErrorCode err;
+  uint32_t decodedData;
+
+  char printBuffer[128];
+
+  Checksum8Encode(&data, &encoding);
+  //printf("%08x", encoding);
+  err = Checksum8Decode(&encoding, &decodedData);
+
+  printf("--- Checksum8 detecting errors in valid data ---\n");
+  printf("error vector: %x\n", 0);
+  printf("error detected: %i\n", err);
+
+  printf("----- Checksum8 testing for error detection -----\n");
+  srand(0x7ff5);
+  uint16_t missed;
+  for (int k = 0; k < 1024; k++) {
+    uint32_t errVector = (uint32_t)(rand() & 0xffffffff);
+    badEncoding = data ^ errVector;
+    err = Checksum8Decode(&badEncoding, &decodedData);
+    missed += 1 - err;
+  }
+  printf("errors: %i\nerrors missed: %i\n", 1024, missed);
+}
+
+void testCRC8() {
+  uint32_t data = 0x0027A0FF;
+  uint32_t expectedEncoding = 0x27A1FFC6;
+  uint32_t encoding;
+  uint32_t badEncoding;
+  Checksum8__ErrorCode err;
+  uint32_t decodedData;
+
+  char printBuffer[128];
+
+  CRC8Encode(&data, &encoding);
+  //printf("%08x", encoding);
+  err = CRC8Decode(&encoding, &decodedData);
+
+  printf("--- CRC8 detecting errors in valid data ---\n");
+  printf("error vector: %x\n", 0);
+  printf("error detected: %i\n", err);
+
+  printf("----- CRC8 testing for error detection -----\n");
+  srand(0x7ff5);
+  uint16_t missed = 0;
+  for (int k = 0; k < 1024; k++) {
+    uint32_t errVector = (uint32_t)(rand() & 0xffffffff);
+    badEncoding = data ^ errVector;
+    err = Checksum8Decode(&badEncoding, &decodedData);
+    missed += 1 - err;
+  }
+  printf("errors: %i\nerrors missed: %i\n", 1024, missed);
 }
