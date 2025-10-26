@@ -21,3 +21,20 @@ Noah McGlothlin :: 10/26/2025 11:30 am - 4:00 pm
      while because C/CPP act kinda weird in it). Will build small wokwi project with 
      SPI initialization, reading/writing to show both work.
   -- Total time toward Pre-Alpha: 19.24 Hrs
+
+Samuel Cortez :: 10/22/2025 12:32 am - 4:56 am
+  -- Reviewed EEL4744C labs on serial communication
+  -- Watched videos and read discussion forums about serial communication for audio data
+  -- Wrote pseudocode for SPI communication on RP2040
+  -- Total time toward Pre-Alpha: 4.4 Hrs
+  *I logged this session in my own Google Spreadsheet before we all decided to use GitHub for tracking
+
+Samuel Cortez :: 10/26/2025 12:26 pm - 4:54 pm
+  -- Continued working on pre-alpha build
+  -- Implemented some basic components (audio signal generator, adjust filter coefficient knob, save filter setting button, and fixed some
+     issues
+     with the OLED display logic).
+  -- Continued working on the inter-module SPI communication system. Was unable to get the system to work. Currently, the Wokwi simulation lags
+     a lot due to blocking.
+  -- Total time toward Pre-Alpha: 8.87 Hrs
+  *I logged this session in my own Google Spreadsheet before we all decided to use GitHub for tracking
