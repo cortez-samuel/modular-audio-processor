@@ -1,14 +1,23 @@
-Noah McGlothlin :: 10/25/2025 12:20 am
+Noah McGlothlin :: 10/25/2025 12:20 am - 4:25 am
   -- researched different error-detection techniques for passing signals
-  -- end :: 10/25/2025 4:25 am
   -- Total time towards Pre-Alpha: 4 Hrs
 
-Eric Reichard :: 10/25/2025 8:00 pm
+Eric Reichard :: 10/25/2025 8:00 pm - 11:30 pm
   -- wrote i2c drivers for sh1107 oled in wokwi
-  -- end :: 10/25/2025 11:30 pm
   -- Total time towards Pre-Alpha: 3.5 Hrs
 
-Eric Reichard :: 10/26/2025 12:45 pm
+Noah McGlothlin :: 10/25/2025 11:30 am - 4:45 pm  10/25/2025 11:30 pm - 10/26/2025 4:30 am
+  -- More research on CRC, Checksums, and Hamming code. Made flowchart + pseudocode for CRC(N,d) and 
+     wrote Checksum programs and prepared a Safe Communication header for possible use 
+     (need to check how SPI is working to make it better)
+  -- Total time towards Pre-Alpha: 14.25 Hrs
+
+Eric Reichard :: 10/26/2025 12:45 pm - 2:45 pm
   -- edited drivers, researched displays for project use
-  -- end :: 10/25/2025 2:45 pm
   -- Total time towards Pre-Alpha: 5.5 Hrs
+
+Noah McGlothlin :: 10/26/2025 11:30 am - 4:00 pm
+  -- Got Checksum program to work in wokwi. Wrote CRC8 programs that also work in wokwi (Took a 
+     while because C/CPP act kinda weird in it). Will build small wokwi project with 
+     SPI initialization, reading/writing to show both work.
+  -- Total time toward Pre-Alpha: 19.24 Hrs
