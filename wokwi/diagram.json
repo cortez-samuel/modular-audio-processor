@@ -6,15 +6,15 @@
     {
       "type": "wokwi-pi-pico",
       "id": "pico",
-      "top": 0,
-      "left": 0,
+      "top": -3.15,
+      "left": 3.6,
       "attrs": { "builder": "pico-sdk" }
     },
     {
       "type": "board-grove-oled-sh1107",
       "id": "oled1",
-      "top": -182.63,
-      "left": -44.9,
+      "top": -201.83,
+      "left": -35.3,
       "attrs": {}
     }
   ],
