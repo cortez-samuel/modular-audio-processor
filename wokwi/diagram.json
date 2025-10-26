@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "author": "Anonymous maker",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-pi-pico",
+      "id": "pico",
+      "top": 0,
+      "left": 0,
+      "attrs": { "builder": "pico-sdk" }
+    },
+    {
+      "type": "board-grove-oled-sh1107",
+      "id": "oled1",
+      "top": -182.63,
+      "left": -44.9,
+      "attrs": {}
+    }
+  ],
+  "connections": [
+    [ "pico:GP0", "$serialMonitor:RX", "", [] ],
+    [ "pico:GP1", "$serialMonitor:TX", "", [] ],
+    [ "pico:GND.8", "oled1:GND.1", "black", [ "h91.2", "v-137.55" ] ],
+    [ "oled1:VCC", "pico:VBUS", "red", [ "h28.8", "v108.75" ] ],
+    [ "oled1:SDA", "pico:GP20", "orange", [ "h19.2", "v9.6" ] ],
+    [ "oled1:SCL.1", "pico:GP21", "gold", [ "h9.6", "v211.2" ] ]
+  ],
+  "dependencies": {}
+}
