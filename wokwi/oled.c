@@ -1,5 +1,9 @@
 #include "oled.h"
 #include <string.h>
+#include <stdio.h>
+
+// Frame buffer
+static uint8_t framebuffer[OLED_WIDTH * OLED_HEIGHT / 8];
 
 // Font
 static const uint8_t font5x7[96][5] = {
@@ -122,7 +126,7 @@ void oled_init(void) {
     gpio_pull_up(SCL_PIN);
     sleep_ms(250);
 
-    oled_send_command(0xAE); // Display off
+    oled_send_command(0xAE);
     oled_send_command(0xDC); oled_send_command(0x00);
     oled_send_command(0x81); oled_send_command(0x2F);
     oled_send_command(0x20);
@@ -140,40 +144,51 @@ void oled_init(void) {
     oled_send_command(0xAF);
 }
 
-// Fill screen
+// Fill buffer
 void oled_fill(uint8_t color) {
-    uint8_t data[OLED_WIDTH];
-    memset(data, color ? 0xFF : 0x00, sizeof(data));
+    memset(framebuffer, color ? 0xFF : 0x00, sizeof(framebuffer));
+}
 
-    for (uint8_t page = 0; page < 16; page++) {
-        oled_send_command(0xB0 + page);
-        oled_send_command(0x00);
-        oled_send_command(0x10);
-        oled_send_data(data, OLED_WIDTH);
-    }
+// Set pixel in buffer
+void oled_set_pixel(uint8_t x, uint8_t y, uint8_t value) {
+    if (x >= OLED_WIDTH || y >= OLED_HEIGHT) return;
+    uint16_t index = x + (y / 8) * OLED_WIDTH;
+    uint8_t bit = 1 << (y % 8);
+
+    if (value)
+        framebuffer[index] |= bit;
+    else
+        framebuffer[index] &= ~bit;
 }
 
 // Single ascii
 void oled_draw_char(uint8_t x, uint8_t y, char c) {
-    if (c < 32 || c > 127) return;
+    if (c < 32 || c > 127) c = '?';
     const uint8_t *glyph = font5x7[c - 32];
-    uint8_t page = y / 8;
-
-    oled_send_command(0xB0 + page);
-    oled_send_command(0x00 + (x & 0x0F));
-    oled_send_command(0x10 + (x >> 4));
-
-    uint8_t buf[7];
-    buf[0] = 0x40;
-    for (int i = 0; i < 5; i++) buf[i + 1] = glyph[i];
-    buf[6] = 0x00; // space
-    i2c_write_blocking(I2C_PORT, SH1107_ADDR, buf, 7, false);
+    for (uint8_t i = 0; i < 5; i++) {
+        uint8_t line = glyph[i];
+        for (uint8_t j = 0; j < 7; j++) {
+            oled_set_pixel(x + i, y + j, line & 0x01);
+            line >>= 1;
+        }
+    }
 }
 
 // Text string
 void oled_draw_text(uint8_t x, uint8_t y, const char *str) {
-    while (*str && x < OLED_WIDTH - 6) {
+    while (*str) {
         oled_draw_char(x, y, *str++);
         x += 6;
+        if (x + 5 >= OLED_WIDTH) break;
+    }
+}
+
+// Push framebuffer
+void oled_update(void) {
+    for (uint8_t page = 0; page < (OLED_HEIGHT / 8); page++) {
+        oled_send_command(0xB0 + page);      // Page address
+        oled_send_command(0x00);             // Lower column
+        oled_send_command(0x10);             // Higher column
+        oled_send_data(&framebuffer[page * OLED_WIDTH], OLED_WIDTH);
     }
 }

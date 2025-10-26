@@ -4,9 +4,10 @@
 int main() {
     stdio_init_all();
     oled_init();
-    oled_fill(0);
 
-    oled_draw_text(0, 0, "Hello WORLD!");
+    oled_draw_text(0, 0, "abcdefghijklmnopqrstuvwxyz");
+    oled_update();
+
 
     while (true) {
         tight_loop_contents();
