@@ -38,3 +38,16 @@ Samuel Cortez :: 10/26/2025 12:26 pm - 4:54 pm
      a lot due to blocking.
   -- Total time toward Pre-Alpha: 8.87 Hrs
   *I logged this session in my own Google Spreadsheet before we all decided to use GitHub for tracking
+
+Logan Dukes :: 10/25/2025 1:00 pm - 4:00 pm
+  -- Research methods for storing data persistently
+  -- Pi Pico does not have EEPROM so will have to emulate with flash memory
+  -- Total Time toward Pre-Alpha: 3 Hrs
+
+Logan Dukes :: 10/26/2025 4:00 pm - 8:15 pm
+  -- Worked on writing code for using flash as emulated EEPROM to be able to have states
+     persist across restarts
+  -- In wokwi cannot use the flash for this purpose so had to redo code and instead implement
+     this persistent memory as pure code for now. This will be updated to use the flash
+     when actual hardware is used
+  -- Total Time toward Pre-Alpha: 7.25 Hrs
