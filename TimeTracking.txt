@@ -63,3 +63,11 @@ Samuel Cortez :: 10/26/2025 5:15 pm - 8:47 pm
   -- tried hand at making SPI display drivers for later use
   -- wokwi oled fix
   -- Total time towards Pre-Alpha: 9.5 Hrs
+
+William Osborne :: 10/26/2025 17:05 - 22:05
+  -- Researched discrete-time continuous passive filters
+     -- only implemented low-pass and high-pass, though
+  -- Adding filter swapping between the two implemented ones
+     -- created in a general manner to allow more filters later on
+  -- Connecting the persistent state to the filter swapping
+  -- Total time towards pre-alpha: 5 hrs
