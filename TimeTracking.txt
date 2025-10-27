@@ -64,10 +64,18 @@ Samuel Cortez :: 10/26/2025 5:15 pm - 8:47 pm
   -- wokwi oled fix
   -- Total time towards Pre-Alpha: 9.5 Hrs
 
+William osborne :: 10/22/2025 15:17 - 17:30
+  -- Post-checkin in-depth research on capabilities of chosen microprocessor
+     -- Do we have access to an FPU?
+  -- Drafting of a general organizational code scheme for filter functions
+     and setting state
+  -- Tital time towards pre-alpha: 2.25 hrs
+  * Logged pre-GitHub in my own spreadsheet
+
 William Osborne :: 10/26/2025 17:05 - 22:05
   -- Researched discrete-time continuous passive filters
      -- only implemented low-pass and high-pass, though
   -- Adding filter swapping between the two implemented ones
      -- created in a general manner to allow more filters later on
   -- Connecting the persistent state to the filter swapping
-  -- Total time towards pre-alpha: 5 hrs
+  -- Total time towards pre-alpha: 7.25 hrs
