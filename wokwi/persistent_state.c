@@ -7,7 +7,7 @@ static PersistentState currentState;
 void persistent_init() {
     // On startup, set default values (read from EEPROM in reality)
     currentState.effectType = 0;   // default effect
-    currentState.alphaParam = 0; // default parameter
+    currentState.alphaParam = 0.5f; // default parameter
 }
 
 // Load state (returns current emulated state)
