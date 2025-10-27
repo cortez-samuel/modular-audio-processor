@@ -1,5 +1,3 @@
-# modular-audio-processor
-
 # Modular Audio Processor (Pre-Alpha Build)
 For this pre-alpha build, we decided to use a Wokwi simulation of a Pi Pico (which also uses the RP2040 chip). This way, we can test the feasibility of our design before we invest resources into physically constructing a prototype. In summary, this pre-alpha build reads an analog signal from a potentiometer that simulates audio input, applies a configurable digital filter, and displays both the original and filtered waveforms on two separate OLED displays.
 
