@@ -163,6 +163,8 @@ void oled_fill(uint8_t id, uint8_t color) {
 void oled_set_pixel(uint8_t id, uint8_t x, uint8_t y, uint8_t value) {
     if (x >= OLED_WIDTH || y >= OLED_HEIGHT) return;
     
+    if(x < 32) x += 96; else x -= 32;
+
     uint8_t* fb = (id == 0) ? framebuffer_0 : framebuffer_1;
     uint16_t index = x + (y / 8) * OLED_WIDTH;
     uint8_t bit = 1 << (y % 8);

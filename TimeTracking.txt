@@ -57,3 +57,9 @@ Samuel Cortez :: 10/26/2025 5:15 pm - 8:47 pm
   -- Since blocking issue creates a lot of lag in Wokwi, I just focused on implementing the SPI transmission
   -- Added the logic analyzer component to prove serial clock, chip select, and data transmission worked per SPI protocol
   -- Total time toward Pre-Alpha: 12.4 hrs
+
+  Eric Reichard :: 10/26/2025 5:40 pm - 9:40 pm
+  -- reading sh1107 datasheet, researching i2c and spi for display
+  -- tried hand at making SPI display drivers for later use
+  -- wokwi oled fix
+  -- Total time towards Pre-Alpha: 9.5 Hrs
