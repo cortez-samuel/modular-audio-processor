@@ -9,10 +9,22 @@
 #include "persistent_state.h"
 
 float alpha = 0.5;
-float (*cur_filter)(unsigned int*, unsigned int*, unsigned int, float);
+
+FilterFunc cur_filter;
+unsigned int _cur_filter_index = 0;
+
 unsigned int input_buffer[128];
 unsigned int filter_buffer[128];
 unsigned int index = 0;
+
+void next_filter() {
+    _cur_filter_index = (_cur_filter_index + 1) % FILTER_COUNT;
+    cur_filter = available_filters[_cur_filter_index];
+}
+
+const char* cur_filter_name(void) {
+    return filter_names[_cur_filter_index];
+}
 
 float map(float x, float input_min, float input_max, float output_min, float output_max) {
     return (x - input_min) * (output_max - output_min) / (input_max - input_min) + output_min;
@@ -46,6 +58,10 @@ int main(){
     gpio_set_dir(28, GPIO_IN);
     gpio_pull_up(28);
 
+	gpio_init(12)
+    gpio_set_dir(12, GPIO_IN);
+    gpio_pull_up(12);
+
     gpio_init(22);
     gpio_set_dir(22, GPIO_IN);
     gpio_pull_up(22);
@@ -72,7 +88,8 @@ int main(){
     testChecksum8();
     testCRC8();
 
-    cur_filter = low_pass;
+    cur_filter = available_filters[_cur_filter_index];
+
     while(1){
         if(!gpio_get(28)){
             adc_select_input(1);
@@ -86,6 +103,10 @@ int main(){
             persistent_save(state);
         }
 
+        if(!gpio_get(12)){
+            next_filter();
+        }
+
         adc_select_input(0);
         int og_signal = adc_read();
         uint16_t spi_data = (uint16_t)og_signal;
@@ -97,7 +118,7 @@ int main(){
         oled_fill(0, 0);
         oled_fill(1, 0);
         draw_waveform(0, input_buffer, 5, "OG");
-        draw_waveform(1, filter_buffer, 5, "LPF");
+        draw_waveform(1, filter_buffer, 5, cur_filter_name());
         oled_update(0);
         oled_update(1);
         sleep_ms(50);
