@@ -5,9 +5,10 @@
 
 #include "oled.h"
 #include "SignalErrorDetection.h"
+#include "filters.h"
 
 float alpha = 0.5;
-float last_out = 0;
+float (*cur_filter)(unsigned int*, unsigned int*, unsigned int, float);
 unsigned int input_buffer[128];
 unsigned int filter_buffer[128];
 unsigned int index = 0;
@@ -46,17 +47,15 @@ int main(){
     oled_init(1);
     adc_select_input(0);
     int init_val = adc_read();
-    last_out = (float)init_val;
     for(unsigned int i = 0; i < 128; i++){
       input_buffer[i] = init_val;
       filter_buffer[i] = init_val;
     }
 
-
     testChecksum8();
     testCRC8();
 
-
+    cur_filter = low_pass;
     while(1){
         if(!gpio_get(28)){
             adc_select_input(1);
@@ -66,9 +65,8 @@ int main(){
         }
         adc_select_input(0);
         int og_signal = adc_read();
-        float filter_output = (1.0 - alpha) * og_signal + alpha * last_out;
-        last_out = filter_output;
         input_buffer[index] = og_signal;
+        float filter_output = cur_filter(input_buffer, filter_buffer, index, alpha);
         filter_buffer[index] = (int)filter_output;
         index = (index + 1) % 128;
         oled_fill(0, 0);

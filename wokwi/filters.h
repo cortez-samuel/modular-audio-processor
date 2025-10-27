@@ -1,0 +1,7 @@
+#ifndef filters_h_INCLUDED
+#define filters_h_INCLUDED
+
+float low_pass(unsigned int *raw, unsigned int *filt, unsigned int index, float alpha);
+float high_pass(unsigned int *raw, unsigned int *filt, unsigned int index, float alpha);
+
+#endif // filters_h_INCLUDED
