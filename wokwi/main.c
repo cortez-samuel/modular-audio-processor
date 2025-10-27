@@ -8,11 +8,23 @@
 #include "filters.h"
 #include "persistent_state.h"
 
-float alpha = 0.5;
-float (*cur_filter)(unsigned int*, unsigned int*, unsigned int, float);
+PersistentState global_state;
+
 unsigned int input_buffer[128];
 unsigned int filter_buffer[128];
 unsigned int index = 0;
+
+void next_filter() {
+    global_state.effectType = (global_state.effectType + 1) % FILTER_COUNT;
+}
+
+const char* cur_filter_name(void) {
+    return filter_names[global_state.effectType];
+}
+
+const FilterFunc cur_filter_func(void) {
+	return available_filters[global_state.effectType];
+}
 
 float map(float x, float input_min, float input_max, float output_min, float output_max) {
     return (x - input_min) * (output_max - output_min) / (input_max - input_min) + output_min;
@@ -46,6 +58,10 @@ int main(){
     gpio_set_dir(28, GPIO_IN);
     gpio_pull_up(28);
 
+	gpio_init(12);
+    gpio_set_dir(12, GPIO_IN);
+    gpio_pull_up(12);
+
     gpio_init(22);
     gpio_set_dir(22, GPIO_IN);
     gpio_pull_up(22);
@@ -57,8 +73,7 @@ int main(){
     gpio_set_function(5, GPIO_FUNC_SPI);
 
     persistent_init();
-    PersistentState state = persistent_load();
-    alpha = state.alphaParam;
+    global_state = persistent_load();
 
     oled_init(0);
     oled_init(1);
@@ -72,18 +87,20 @@ int main(){
     testChecksum8();
     testCRC8();
 
-    cur_filter = low_pass;
     while(1){
         if(!gpio_get(28)){
             adc_select_input(1);
             int cutoff = adc_read();
-            alpha = map(cutoff, 0, 4095, 5, 95) / 100.0;
+            global_state.alphaParam = map(cutoff, 0, 4095, 5, 95) / 100.0;
             sleep_ms(100);
         }
 
         if(!gpio_get(22)){
-            state.alphaParam = alpha;
-            persistent_save(state);
+            persistent_save(global_state);
+        }
+
+        if(!gpio_get(12)){
+            next_filter();
         }
 
         adc_select_input(0);
@@ -91,13 +108,13 @@ int main(){
         uint16_t spi_data = (uint16_t)og_signal;
         spi_write16_blocking(spi0, &spi_data, 1);
         input_buffer[index] = og_signal;
-        float filter_output = cur_filter(input_buffer, filter_buffer, index, alpha);
+        float filter_output = cur_filter_func()(input_buffer, filter_buffer, index, global_state.alphaParam);
         filter_buffer[index] = (int)filter_output;
         index = (index + 1) % 128;
         oled_fill(0, 0);
         oled_fill(1, 0);
         draw_waveform(0, input_buffer, 5, "OG");
-        draw_waveform(1, filter_buffer, 5, "LPF");
+        draw_waveform(1, filter_buffer, 5, cur_filter_name());
         oled_update(0);
         oled_update(1);
         sleep_ms(50);
