@@ -6,6 +6,7 @@
 #include "oled.h"
 #include "SignalErrorDetection.h"
 #include "filters.h"
+#include "persistent_state.h"
 
 float alpha = 0.5;
 float (*cur_filter)(unsigned int*, unsigned int*, unsigned int, float);
@@ -40,9 +41,19 @@ int main(){
     adc_init();
     adc_gpio_init(26);
     adc_gpio_init(27);
+
     gpio_init(28);
     gpio_set_dir(28, GPIO_IN);
     gpio_pull_up(28);
+
+    gpio_init(22);
+    gpio_set_dir(22, GPIO_IN);
+    gpio_pull_up(22);
+
+    persistent_init();
+    PersistentState state = persistent_load();
+    alpha = state.alphaParam;
+
     oled_init(0);
     oled_init(1);
     adc_select_input(0);
@@ -63,6 +74,12 @@ int main(){
             alpha = map(cutoff, 0, 4095, 5, 95) / 100.0;
             sleep_ms(100);
         }
+
+        if(!gpio_get(22)){
+            state.alphaParam = alpha;
+            persistent_save(state);
+        }
+
         adc_select_input(0);
         int og_signal = adc_read();
         input_buffer[index] = og_signal;
