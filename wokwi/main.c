@@ -1,8 +1,8 @@
 #include "pico/stdlib.h"
 #include "hardware/adc.h"
 #include "hardware/gpio.h"
+#include "hardware/spi.h"
 #include <stdio.h>
-
 #include "oled.h"
 #include "SignalErrorDetection.h"
 #include "filters.h"
@@ -50,6 +50,12 @@ int main(){
     gpio_set_dir(22, GPIO_IN);
     gpio_pull_up(22);
 
+    spi_init(spi0, 1000 * 1000);
+    spi_set_format(spi0, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+    gpio_set_function(7, GPIO_FUNC_SPI);
+    gpio_set_function(6, GPIO_FUNC_SPI);
+    gpio_set_function(5, GPIO_FUNC_SPI);
+
     persistent_init();
     PersistentState state = persistent_load();
     alpha = state.alphaParam;
@@ -82,6 +88,8 @@ int main(){
 
         adc_select_input(0);
         int og_signal = adc_read();
+        uint16_t spi_data = (uint16_t)og_signal;
+        spi_write16_blocking(spi0, &spi_data, 1);
         input_buffer[index] = og_signal;
         float filter_output = cur_filter(input_buffer, filter_buffer, index, alpha);
         filter_buffer[index] = (int)filter_output;
@@ -92,7 +100,7 @@ int main(){
         draw_waveform(1, filter_buffer, 5, "LPF");
         oled_update(0);
         oled_update(1);
-        sleep_ms(500);
+        sleep_ms(50);
     }
 }
 
