@@ -79,3 +79,13 @@ William Osborne :: 10/26/2025 17:05 - 22:05
      -- created in a general manner to allow more filters later on
   -- Connecting the persistent state to the filter swapping
   -- Total time towards pre-alpha: 7.25 hrs
+
+-- PROTOTYPE -- 
+
+Eric Reichard :: 10/29/2025 15:00 - 16:00
+  -- researched which components to buy
+  -- purchased:
+    1x OLED display             $6.99
+    1x POGO 7pin pairs, 2pairs  $9.99
+    Total:                      $18.25 (including tax)
+    Per-Person:                 $3.25
