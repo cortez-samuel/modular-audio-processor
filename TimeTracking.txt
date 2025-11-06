@@ -89,3 +89,7 @@ Eric Reichard :: 10/29/2025 15:00 - 16:00
     1x POGO 7pin pairs, 2pairs  $9.99
     Total:                      $18.25 (including tax)
     Per-Person:                 $3.25
+
+Samuel Cortez :: 11/6/2025 9:00 am - 12:04 pm
+  -- Researched downsampling methods for our OLED display
+  -- Worked on adapting the Wokwi Pi Pico simulation implementation of SPI communication to the Adafruit Feather
