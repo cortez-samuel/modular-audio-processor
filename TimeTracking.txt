@@ -82,14 +82,20 @@ William Osborne :: 10/26/2025 17:05 - 22:05
 
 -- PROTOTYPE -- 
 
-Eric Reichard :: 10/29/2025 15:00 - 16:00
+Eric Reichard :: 10/29/2025 3:00 pm - 4:00 pm
   -- researched which components to buy
   -- purchased:
     1x OLED display             $6.99
     1x POGO 7pin pairs, 2pairs  $9.99
     Total:                      $18.25 (including tax)
     Per-Person:                 $3.25
+  -- Total time: 10.5 hrs
 
 Samuel Cortez :: 11/6/2025 9:00 am - 12:04 pm
   -- Researched downsampling methods for our OLED display
   -- Worked on adapting the Wokwi Pi Pico simulation implementation of SPI communication to the Adafruit Feather
+  -- Total time: 15.5 hrs
+
+Eric Reichard :: 11/7/2046 12:45am - 7:30 am
+  -- Implemented OLED display drivers, verified working
+  -- Total time: 17.25 hrs

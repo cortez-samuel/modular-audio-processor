@@ -1,3 +1,25 @@
+# Modular Audio Processor (Prototype Build)
+ Text here
+
+## OLED Display
+The display utilizes custom drivers to interface with the SSD1306 display over SPI. The pins are pre-configured to use the top-left most pins on the Feather RP2040 (A0, A1, A2, A3, 24). 
+
+## Building
+- Download the Pico-SDK and ensure the environment variable `PICO_SDK_PATH` on your system is set to it's location.
+- Ensure the `arm-none-eabi` compile toolchain is installed.
+- From root, run:
+```
+mkdir build
+cd build
+cmake ..
+make
+```
+- This should create the .uf2 file in `/build` to install on the Feather RP2040
+
+
+
+<br><br>
+---
 # Modular Audio Processor (Pre-Alpha Build)
 For this pre-alpha build, we decided to use a Wokwi simulation of a Pi Pico (which also uses the RP2040 chip). This way, we can test the feasibility of our design before we invest resources into physically constructing a prototype. In summary, this pre-alpha build reads an analog signal from a potentiometer that simulates audio input, applies a configurable digital filter, and displays both the original and filtered waveforms on two separate OLED displays.
 
@@ -62,3 +84,13 @@ Core Hardware Initialization: The major peripherals for this system are configur
 - There is an issue with our display in that a waveform wraps around (this means that after a waveform shape leaves from the left side, it comes back to the right side).
 - Right now, the `persistent_state` module does not save to flash mmory, as any saved `alpha` value is lost when the Wokwi simulation is reset. However, this can be implemented properly when we use the Pico's SDK flash memory API during the physical construction of our prototype.
 - Since Wokwi only allows one MCU in a simulation, we were not able to formally verify the functionality of receiving data via SPI. While the RP2040 does have two SPI buses, using both of them to test transmission and receiving caused blocking, which created a lot of lag in the Wokwi simulation. Thus, we could not simulate the daisy-chained SPI communication between modules. However, we were able to verify the functionality of the SPI transmission using a logic analyzer to observe the SCK, CS, and TX signals. Thus, we do not have reason to believe that another RP2040 would have difficulties receiving the data via SPI.
+
+## Building
+- Download the Pico-SDK and ensure the environment variable `PICO_SDK_PATH` on your system is set to it's location.
+- Ensure the `arm-none-eabi` compile toolchain is installed.
+- From root, run:
+
+        cd build
+        cmake ..
+        make
+- This should create the .uf2 file in `/build` to install on the Feather RP2040
