@@ -104,3 +104,9 @@ Samuel Cortez :: 11/9/2025 12:00 pm - 1:00 pm
   -- Researched punchy kickdrum project Rob showed us
   -- Examined manual for the Labor Scope for components we could potentially implement
   -- Total time: 16.5 hrs
+
+Samuel Cortez :: 11/10/2025  3:30 pm - 6:30 pm
+  -- Continued working on SPI communication on Adafruit Feather
+  -- Implemented system logic for determining the "main" module with audio input
+  -- Started working on integrating the SPI communication implementation with what we have for our current source code
+  -- Total time: 19.5 hrs
