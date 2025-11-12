@@ -110,3 +110,9 @@ Samuel Cortez :: 11/10/2025  3:30 pm - 6:30 pm
   -- Implemented system logic for determining the "main" module with audio input
   -- Started working on integrating the SPI communication implementation with what we have for our current source code
   -- Total time: 19.5 hrs
+
+Samuel Cortez :: 10/11/2025  6:04 pm - 10:10 pm
+  -- Tested current implementations with real audio data input
+  -- There is currently an issue with some of the signal data being transmitted incorrectly when using a .wav file with the DAD waveform generator
+  -- I wasn't able to resolve this but it potentially be fixed when the CRC checksum implementation for the Adafruit Feather is done
+  -- Total time: 23.5 hrs
