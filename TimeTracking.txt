@@ -116,3 +116,12 @@ Samuel Cortez :: 10/11/2025  6:04 pm - 10:10 pm
   -- There is currently an issue with some of the signal data being transmitted incorrectly when using a .wav file with the DAD waveform generator
   -- I wasn't able to resolve this but it potentially be fixed when the CRC checksum implementation for the Adafruit Feather is done
   -- Total time: 23.5 hrs
+
+Samuel Cortez :: 10/12/2025  3:00 pm - 8:00 pm
+  -- I was able to fix the issue regarding the transmission of the audio signal
+  -- Obtained 4-ohm micro speaker to begin testing audio output
+  -- Reviewed EEL4744C notes/labs regarding ADC/DAC
+  -- Got the ADC module and class D audio amplifier working
+  -- RP2040 does not have a built-in DAC module
+  -- Began implementing and testing PWM to emulate analog signal (this will lead to a decrease in audio quality, it's currently a bit choppy)
+  -- Total time: 28.5 hrs
