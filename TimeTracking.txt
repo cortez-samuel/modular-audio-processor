@@ -128,16 +128,16 @@ Samuel Cortez :: 10/12/2025  3:00 pm - 8:00 pm
 
 Logan Dukes :: 11/12/2025 4:00 pm - 6:00 pm
   -- Researching using the actual flash now for the rp2040 instead of emulated flash like in the Wokwi simulation
-  -- Total Time toward Pre-Alpha: 9.25 Hrs
+  -- Total Time: 9.25 Hrs
 
 Logan Dukes :: 11/13/2025 4:00 pm - 8:00 pm
   -- Working on code for persistent state on rp2040. Having issues understanding using the flash due to it being external flash. General functions have
      have been created but need updated based on needing QSPI or not.
-  -- Total Time toward Pre-Alpha: 13.25 Hrs
+  -- Total Time: 13.25 Hrs
 
 Logan Dukes :: 11/13/2025 10:00 pm - 11:00 pm
   -- Looking into how QSPI and XIP works for flash on the rp2040
-  -- Total Time toward Pre-Alpha: 14.25 Hrs
+  -- Total Time: 14.25 Hrs
 
 Noah McGlothlin :: 10/13/2025 10:30 am - 6:30 pm , 9:30 - 4:30am
   -- Testing adc and making struct for it.
@@ -148,3 +148,12 @@ Noah McGlothlin :: 10/13/2025 10:30 am - 6:30 pm , 9:30 - 4:30am
 Noah McGlothlin :: 10/14/2025 10:00 am - 11:15 am
   -- Got ADC class stuff working, will need to write up some docs for proper usage later (mainly initializing since that has a lot of stuff)
   -- Total time: 35.5 hrs
+
+Logan Dukes :: 11/14/2025 12:00 am - 1:30 am
+  -- Working on updating functions to use XIP for flash memory
+  -- Total Time: 15.75 Hrs
+
+Logan Dukes :: 11/14/2025 11:00 am - 3:45 pm
+  -- Finishing implementing persistent flash memory
+  -- Attempted to use a round robin system to save to different locations to limit wear on each section of flash memory
+  -- Total Time: 20.5 Hrs
