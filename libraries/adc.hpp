@@ -35,25 +35,24 @@ public:
 
     static void setupIRQHandler(irq_handler_t handler);
     static void enableIRQ(bool enable);
-private:
-    static uint8_t activeChannel;
-    static uint8_t runningChannel;
 
-    static ADC adcChannels[4];
 
 public:
     ADC(uint8_t channel);
-    
+
 public:
+    bool newValue() const;
+
     void setRawValue(uint16_t raw);
 
-    uint16_t rawValue() const;
-    float trueValue() const;
+    uint16_t rawValue();
+    float trueValue();
 
     uint8_t getChannel() const;
 private:
-    uint16_t value;
-    uint8_t channel;
+    uint16_t m_value;
+    uint8_t m_channel;
+    bool m_newValue;
 };
 
 #endif // ADC_HPP

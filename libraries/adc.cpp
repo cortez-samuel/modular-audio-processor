@@ -2,37 +2,57 @@
 
 #include "hardware/irq.h"
 
-// OBJECT STUFF
-ADC::ADC(uint8_t channel): value(0), channel(channel) {}
 
-void ADC::setRawValue(uint16_t raw){
-    value = raw;
+// OBJECT STUFF
+ADC::ADC(uint8_t channel): m_value(0), m_channel(channel), m_newValue(false) {
+    adc_gpio_init(channel + 26);
 }
 
-uint16_t ADC::rawValue() const
-{
-    return value;
+bool ADC::newValue() const {
+    return m_newValue;
+}
+
+void ADC::setRawValue(uint16_t raw){
+    m_newValue = true;
+    m_value = raw;
 }
 
 static const float conversion_factor = 3.3f / (1 << 12);
-float ADC::trueValue() const {
-    return value * conversion_factor;
+uint16_t ADC::rawValue() {
+    m_newValue = false;
+    return m_value;
+}
+float ADC::trueValue() {
+    m_newValue = false;
+    return m_value * conversion_factor;
 }
 
 uint8_t ADC::getChannel() const {
-    return channel;
+    return m_channel;
 }
 
+
+static uint8_t activeChannel;
+static uint8_t runningChannel;
+static ADC adcChannels[4] = {
+    ADC(0),
+    ADC(1),
+    ADC(2),
+    ADC(3),
+};
 // OVERALL ADC STUFF
 void ADC::init(float sample_freq, 
         bool fifo_enable, bool dreq_enable, uint16_t threshold, 
         irq_handler_t irq_handler) {
+    // sample_freq >= 750
 
-    ADC::adcChannels[0] = ADC(0);
-    ADC::adcChannels[1] = ADC(1);
-    ADC::adcChannels[2] = ADC(2);
-    ADC::adcChannels[3] = ADC(3); 
+    adcChannels[0] = ADC(0);
+    adcChannels[1] = ADC(1);
+    adcChannels[2] = ADC(2);
+    adcChannels[3] = ADC(3); 
 
+    
+    adc_init();
     ADC::setSampleFrequency(sample_freq);
 
     ADC::setupFIFO(fifo_enable, dreq_enable, threshold);
@@ -53,13 +73,13 @@ void ADC::setActiveChannel(uint8_t channel) {
 }
 
 void ADC::setActiveChannel(const ADC &adc) {
-    activeChannel = adc.channel;
+    activeChannel = adc.getChannel();
     adc_select_input(activeChannel);
 }
 
 uint16_t ADC::read() {
     uint16_t raw = adc_read();
-    ADC::adcChannels[activeChannel].setRawValue(raw);
+    adcChannels[activeChannel].setRawValue(raw);
     return raw;
 }
 
@@ -88,6 +108,7 @@ void ADC::setupFIFO(bool enable, bool dreq_enable, uint16_t threshold) {
     adc_fifo_setup(enable, dreq_enable, threshold, false, false);
 }
 void ADC::clearFIFO() {
+    if (adc_fifo_get_level() == 0) {return;}
     adc_fifo_drain();
 }
 uint16_t ADC::readFIFO() {
@@ -106,6 +127,8 @@ void ADC::enableIRQ(bool enable) {
 }
 
 
+bool pin13 = 0;
+#include <cstdio>
 void defaultADCRIQHandler() {
     ADC::readFIFO();
 }

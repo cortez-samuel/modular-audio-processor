@@ -116,3 +116,13 @@ Samuel Cortez :: 10/11/2025  6:04 pm - 10:10 pm
   -- There is currently an issue with some of the signal data being transmitted incorrectly when using a .wav file with the DAD waveform generator
   -- I wasn't able to resolve this but it potentially be fixed when the CRC checksum implementation for the Adafruit Feather is done
   -- Total time: 23.5 hrs
+
+Noah McGlothlin :: 10/13/2025 10:30 am - 6:30 pm , 9:30 - 4:30am
+  -- Testing adc and making struct for it.
+  -- Had some computer + board trouble in beginning so had to fix that first.
+  -- Got ADC working in another project, IRQ handler as well. Tested if adc_read() will cause FIFO stuff and, therefore, 
+     possible IRQ stuff (it does).
+  -- Total time: 34.24 hrs
+Noah McGlothlin :: 10/14/2025 10:00 am - 11:15 am
+  -- Got ADC class stuff working, will need to write up some docs for proper usage later (mainly initializing since that has a lot of stuff)
+  -- Total time: 35.5 hrs

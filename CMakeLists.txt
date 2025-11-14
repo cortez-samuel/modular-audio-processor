@@ -9,7 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Initialise pico_sdk from installed location
 # (note this can come from environment, CMake cache etc)
 
-if(1)
+if(0)
 # == DO NOT EDIT THE FOLLOWING LINES for the Raspberry Pi Pico VS Code Extension to work ==
 if(WIN32)
     set(USERHOME $ENV{USERPROFILE})
@@ -30,13 +30,13 @@ set(PICO_BOARD adafruit_feather_rp2040 CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-project(test1 C CXX ASM)
+project(adc_test C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
-# Add executable. Default name is the project name, version 0.1
 
+# Add executable. Default name is the project name, version 0.1
 add_executable(oled_test 
     test/oled_test.cpp 
     libraries/oled.cpp
@@ -56,6 +56,7 @@ target_include_directories(oled_test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(oled_test)
+
 
 add_executable(adc_test
     test/adc_test.cpp
