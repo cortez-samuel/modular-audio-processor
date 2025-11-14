@@ -127,10 +127,10 @@ void ADC::enableIRQ(bool enable) {
 }
 
 
-bool pin13 = true;
+//bool pin13 = true;
 #include <cstdio>
 void defaultADCRIQHandler() {
     ADC::readFIFO();
-    gpio_put(13, pin13);
-    pin13 = !pin13;
+    //gpio_put(13, pin13);
+    //pin13 = !pin13;
 }
