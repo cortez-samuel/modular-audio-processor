@@ -125,3 +125,16 @@ Samuel Cortez :: 10/12/2025  3:00 pm - 8:00 pm
   -- RP2040 does not have a built-in DAC module
   -- Began implementing and testing PWM to emulate analog signal (this will lead to a decrease in audio quality, it's currently a bit choppy)
   -- Total time: 28.5 hrs
+
+Logan Dukes :: 11/12/2025 4:00 pm - 6:00 pm
+  -- Researching using the actual flash now for the rp2040 instead of emulated flash like in the Wokwi simulation
+  -- Total Time toward Pre-Alpha: 9.25 Hrs
+
+Logan Dukes :: 11/13/2025 4:00 pm - 8:00 pm
+  -- Working on code for persistent state on rp2040. Having issues understanding using the flash due to it being external flash. General functions have
+     have been created but need updated based on needing QSPI or not.
+  -- Total Time toward Pre-Alpha: 13.25 Hrs
+
+Logan Dukes :: 11/13/2025 10:00 pm - 11:00 pm
+  -- Looking into how QSPI and XIP works for flash on the rp2040
+  -- Total Time toward Pre-Alpha: 14.25 Hrs
