@@ -17,10 +17,10 @@ int main(){
     stdio_init_all();
     spi_init(spi0, 8000000);
     spi_set_format(spi0, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
-    gpio_set_function(16, GPIO_FUNC_SPI);
+    gpio_set_function(20, GPIO_FUNC_SPI);
     gpio_set_function(18, GPIO_FUNC_SPI);
     gpio_set_function(19, GPIO_FUNC_SPI);
-    bi_decl(bi_3pins_with_func(16, 19, 18, GPIO_FUNC_SPI));
+    bi_decl(bi_3pins_with_func(20, 19, 18, GPIO_FUNC_SPI));
     gpio_init(17);
     gpio_set_dir(17, GPIO_OUT);
     gpio_put(17, 1);
