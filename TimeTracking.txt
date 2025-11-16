@@ -123,7 +123,7 @@ Samuel Cortez :: 10/12/2025  3:00 pm - 8:00 pm
   -- Reviewed EEL4744C notes/labs regarding ADC/DAC
   -- Got the ADC module and class D audio amplifier working
   -- RP2040 does not have a built-in DAC module
-  -- Began implementing and testing PWM to emulate analog signal (this will lead to a decrease in audio quality, it's currently a bit choppy)
+  -- Began implementing and testing PWM to emulate analog signal
   -- Total time: 28.5 hrs
 
 Logan Dukes :: 11/12/2025 4:00 pm - 6:00 pm
@@ -145,6 +145,7 @@ Noah McGlothlin :: 10/13/2025 10:30 am - 6:30 pm , 9:30 - 4:30am
   -- Got ADC working in another project, IRQ handler as well. Tested if adc_read() will cause FIFO stuff and, therefore, 
      possible IRQ stuff (it does).
   -- Total time: 34.24 hrs
+
 Noah McGlothlin :: 10/14/2025 10:00 am - 11:15 am
   -- Got ADC class stuff working, will need to write up some docs for proper usage later (mainly initializing since that has a lot of stuff)
   -- Total time: 35.5 hrs
@@ -157,3 +158,13 @@ Logan Dukes :: 11/14/2025 11:00 am - 3:45 pm
   -- Finishing implementing persistent flash memory
   -- Attempted to use a round robin system to save to different locations to limit wear on each section of flash memory
   -- Total Time: 20.5 Hrs
+
+Samuel Cortez :: 11/15/2025 5:00 pm - 11:30 pm
+  -- Purchased: x1 4-ohm, 3W Speaker    $4.99
+  -- Total cost per module              $23.59 (Forgot to include this in our BOM)
+  -- Continued working on SPI communication logic
+  -- Added to ignore incoming data from modules receiving the audio data
+  -- Researched audio input vs. audio storage for playback
+  -- Researched converting .wav/mp3 files to raw PCM
+  -- Adafruit Feather only has 8 MB flash and 264kb RAM, might need another audio test file
+  -- Total time: 35.0 hrs
