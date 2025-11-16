@@ -1,4 +1,5 @@
 #include "persistent_state.h"
+#include "adc.hpp"
 #include "pico/stdlib.h"
 #include "hardware/flash.h"
 #include "hardware/sync.h"
@@ -60,12 +61,21 @@ bool persistent_save(const PersistentState& state) {
     memset(page_buf, 0xFF, FLASH_PAGE_SIZE);
     memcpy(&page_buf[0], &rec_out, sizeof(rec_out));
 
+    // Pause ADC for flash writes
+    ADC::run(false);
+    ADC::clearFIFO();
+    ADC::enableIRQ(false);
+
     uint32_t saved = save_and_disable_interrupts();
     // Erase whole sector
     flash_range_erase(BASE_FLASH_OFFSET, FLASH_SECTOR_SIZE);
     // Program the first page with the new record
     flash_range_program(BASE_FLASH_OFFSET, page_buf, FLASH_PAGE_SIZE);
     restore_interrupts(saved);
+
+    // Re-enable ADC after flash write
+    ADC::run(true);
+    ADC::enableIRQ(true);
 
     // Update in-memory cache
     cached_state = new_state;
