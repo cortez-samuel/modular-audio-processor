@@ -179,3 +179,7 @@ Eric Reichard :: 11/15/2025 8:30 am - 11:30 am
   -- Began I2S implementation for audio output
   -- Time cut short, had to go to ER :/
   -- Total time: 22.25 hrs
+
+  Eric Reichard :: 11/16/2025 12:30 am - 7:30 am
+  -- Tried different libraries in C, circuitypython, arduino to get get I2S working
+  -- Total time: 29.25 hrs
