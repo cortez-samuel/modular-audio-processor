@@ -5,12 +5,12 @@
 #include <cstring>
 #include <cmath>
 
-// Circular log: store 4 records within a single 4 KiB sector at 4MB offset
-// Each record slot is written sequentially; when full, wrap back to slot 0
-static const uint32_t NUM_SLOTS = 4u;
+// Persistent storage: store one record per 4 KiB sector at 4MB offset
+// Write whole sector to satisfy alignment rules
 static const uint32_t FLASH_SECTOR_SIZE = 4096u;
 static const uint32_t BASE_FLASH_OFFSET = 0x00400000u;  // start at 4MB
-// Signature placed at start of each stored record to indicate a valid entry
+static const uint32_t FLASH_PAGE_SIZE = 256u;
+// Signature placed at start of each stored record to indicate valid entry
 // (avoids treating erased flash (0xFFFFFFFF) as valid data).
 static const uint32_t PERSIST_RECORD_SIGNATURE = 0x50E5CAFEu;
 
@@ -22,50 +22,24 @@ struct FlashRecord {
 
 static_assert(sizeof(FlashRecord) <= FLASH_SECTOR_SIZE, "Persistent data too large for one flash sector");
 
-// In-memory cache of the persistent state for quicker access during runtime
+// In-memory cache of persistent state for access during runtime
 static PersistentState cached_state;
-// Track which slot we last loaded from (for next write destination)
-static uint32_t last_loaded_slot = 0;
-
-// Helper: compute flash offset for a given slot index within the sector
-static uint32_t get_slot_offset(uint32_t slot_index) {
-    return BASE_FLASH_OFFSET + (slot_index * sizeof(FlashRecord));
-}
+// Small static page buffer to avoid large stack allocations when programming flash
+static uint8_t page_buf[FLASH_PAGE_SIZE];
 
 void persistent_init() {
-    // Scan all 4 slots to find the newest valid record (highest writeCounter)
-    // If tied, use the last slot with that count
-    PersistentState best_state = { 0, 0.5f, 0 };
-    uint32_t best_write_counter = 0;
-    uint32_t best_slot = 0;
-    bool found_valid = false;
+    // Read the record at the start of the sector
+    const uint8_t* flash_ptr = reinterpret_cast<const uint8_t*>(XIP_BASE + BASE_FLASH_OFFSET);
+    FlashRecord rec;
+    memcpy(&rec, flash_ptr, sizeof(rec));
 
-    for (uint32_t slot = 0; slot < NUM_SLOTS; slot++) {
-        uint32_t offset = get_slot_offset(slot);
-        const uint8_t* flash_ptr = reinterpret_cast<const uint8_t*>(XIP_BASE + offset);
-        FlashRecord rec;
-        memcpy(&rec, flash_ptr, sizeof(rec));
-
-        if (rec.signature == PERSIST_RECORD_SIGNATURE) {
-            // Valid record found; keep it if writeCounter is higher or equal (prefer last slot if tied)
-            if (!found_valid || rec.state.writeCounter >= best_write_counter) {
-                best_state = rec.state;
-                best_write_counter = rec.state.writeCounter;
-                best_slot = slot;
-                found_valid = true;
-            }
-        }
-    }
-
-    if (found_valid) {
-        cached_state = best_state;
-        last_loaded_slot = best_slot;
+    if (rec.signature == PERSIST_RECORD_SIGNATURE) {
+        cached_state = rec.state;
     } else {
-        // No valid records found; set defaults
+        // No valid record found; set defaults
         cached_state.effectType = 0;
         cached_state.alphaParam = 0.5f;
         cached_state.writeCounter = 0;
-        last_loaded_slot = 0;
     }
 }
 
@@ -74,31 +48,32 @@ PersistentState persistent_load() {
 }
 
 bool persistent_save(const PersistentState& state) {
-    // Increment writeCounter and prepare the new state to save
+    // Prepare new state with incremented counter
     PersistentState new_state = state;
     new_state.writeCounter = cached_state.writeCounter + 1;
 
-    // Write to the next slot (round-robin) without erasing
-    uint32_t next_slot = (last_loaded_slot + 1) % NUM_SLOTS;
-    uint32_t offset = get_slot_offset(next_slot);
+    FlashRecord rec_out;
+    rec_out.signature = PERSIST_RECORD_SIGNATURE;
+    rec_out.state = new_state;
 
-    FlashRecord rec;
-    rec.signature = PERSIST_RECORD_SIGNATURE;
-    rec.state = new_state;
+    // Setup buffer to be "empty" and place the record at the start
+    memset(page_buf, 0xFF, FLASH_PAGE_SIZE);
+    memcpy(&page_buf[0], &rec_out, sizeof(rec_out));
 
-    // Ensure interrupts disabled while writing to flash
     uint32_t saved = save_and_disable_interrupts();
-    flash_range_program(offset, reinterpret_cast<const uint8_t*>(&rec), sizeof(rec));
+    // Erase whole sector
+    flash_range_erase(BASE_FLASH_OFFSET, FLASH_SECTOR_SIZE);
+    // Program the first page with the new record
+    flash_range_program(BASE_FLASH_OFFSET, page_buf, FLASH_PAGE_SIZE);
     restore_interrupts(saved);
 
-    // Update in-memory cache and track where we wrote
+    // Update in-memory cache
     cached_state = new_state;
-    last_loaded_slot = next_slot;
 
     // Verify write (read back from XIP)
     FlashRecord verify;
-    const uint8_t* flash_ptr = reinterpret_cast<const uint8_t*>(XIP_BASE + offset);
-    memcpy(&verify, flash_ptr, sizeof(verify));
+    const uint8_t* verify_ptr = reinterpret_cast<const uint8_t*>(XIP_BASE + BASE_FLASH_OFFSET);
+    memcpy(&verify, verify_ptr, sizeof(verify));
     if (verify.signature != PERSIST_RECORD_SIGNATURE) return false;
     if (verify.state.effectType != new_state.effectType) return false;
     if (fabsf(verify.state.alphaParam - new_state.alphaParam) > 1e-6f) return false;
