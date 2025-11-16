@@ -148,3 +148,7 @@ Noah McGlothlin :: 10/13/2025 10:30 am - 6:30 pm , 9:30 - 4:30am
 Noah McGlothlin :: 10/14/2025 10:00 am - 11:15 am
   -- Got ADC class stuff working, will need to write up some docs for proper usage later (mainly initializing since that has a lot of stuff)
   -- Total time: 35.5 hrs
+Noah McGlothlin :: 10/16/2025 1:00 pm - 4:15 pm
+  -- Made a small 8-bit resolution R2R DAC circuit (tested with an Arduino UNO) in case we need it for the demo/presentation
+  -- (time-stamped photos of circuit + output for evidence)
+  -- Total Tile: 38.75 hrs
