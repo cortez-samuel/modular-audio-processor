@@ -168,3 +168,14 @@ Samuel Cortez :: 11/15/2025 5:00 pm - 11:30 pm
   -- Researched converting .wav/mp3 files to raw PCM
   -- Adafruit Feather only has 8 MB flash and 264kb RAM, might need another audio test file
   -- Total time: 35.0 hrs
+
+Eric Reichard :: 11/14 2024 3:30 pm - 5:30 pm
+  -- Group meeting
+  -- Tested PWM, speaker
+  -- Total time: 19.25 hrs
+
+Eric Reichard :: 11/15/2025 8:30 am - 11:30 am
+  -- Looked into audio output
+  -- Began I2S implementation for audio output
+  -- Time cut short, had to go to ER :/
+  -- Total time: 22.25 hrs
