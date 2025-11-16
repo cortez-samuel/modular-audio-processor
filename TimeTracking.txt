@@ -184,3 +184,14 @@ Noah McGlothlin :: 10/16/2025 1:00 pm - 4:15 pm
   -- Made a small 8-bit resolution R2R DAC circuit (tested with an Arduino UNO) in case we need it for the demo/presentation
   -- (time-stamped photos of circuit + output for evidence)
   -- Total Tile: 38.75 hrs
+  
+Logan Dukes :: 11/14/2025 8:00 pm - 10:00 pm
+  -- Trying to fix persistent memory
+  -- Having issues with flash needing to erase before you can write again
+  -- Needing to stay aligned to sector boundaries also causing issues
+  -- Total Time: 22.5 Hrs
+
+Logan Dukes :: 11/15/2025 2:00 pm - 7:30 pm
+  -- Rewriting code due to round robin level wearing requiring too much memory to be implemented properly
+  -- Making sure when erasing, code clears entire sector and when writing, writes only 256 byte chunk to reduce access time
+  -- Total Time: 28 Hrs
