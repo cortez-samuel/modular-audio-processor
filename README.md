@@ -12,10 +12,18 @@ The prototype build targets the Adafruit Feather RP2040 (8MB external QSPI flash
 - On save (`persistent_save()`), the new state is written to flash with automatic counter increment and post-write verification.
 
 ### OLED Display
-The display utilizes custom drivers to interface with the SSD1306 display over SPI. The pins are pre-configured to use the top-left most pins on the Feather RP2040 (A0, A1, A2, A3, 24). 
+The display utilizes custom drivers to interface with the SSD1306 display over SPI. The pins are pre-configured to use the top-left most pins on the Feather RP2040. 
+
+## ADC Signal Input
+The ADC initializes pins A0-A3 as ADC channels.
+- Allows for enabling/disabling the of ADC, alog with configuration.
+- Reads from the active ADC channel, and updates that channel to show it has new data.
+- Allows for interrupts, which helps with consistend sampling rates if desired. 
+- Lets the ADC read once or run at a consistend sampling rate, writing to the ADC FIFO.
 
 ## Known Bugs and Issues
 - Wanted to implement round robin wear spreading for the persistent memory to limit how much each section of flash is written to. However, to do this we would have had to use four 4096-byte sectors for only a small persistent state memory. This would have been too much memory for so little, so had to be abandoned for now.
+- ADC interrupts may interfere with peristent storage.
 
 ## Building
 - Download the Pico-SDK and ensure the environment variable `PICO_SDK_PATH` on your system is set to it's location.
