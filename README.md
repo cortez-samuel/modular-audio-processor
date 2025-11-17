@@ -14,6 +14,9 @@ The prototype build targets the Adafruit Feather RP2040 (8MB external QSPI flash
 ### OLED Display
 The display utilizes custom drivers to interface with the SSD1306 display over SPI. The pins are pre-configured to use the top-left most pins on the Feather RP2040 (A0, A1, A2, A3, 24). 
 
+## Known Bugs and Issues
+- Wanted to implement round robin wear spreading for the persistent memory to limit how much each section of flash is written to. However, to do this we would have had to use four 4096-byte sectors for only a small persistent state memory. This would have been too much memory for so little, so had to be abandoned for now.
+
 ## Building
 - Download the Pico-SDK and ensure the environment variable `PICO_SDK_PATH` on your system is set to it's location.
 - Ensure the `arm-none-eabi` compile toolchain is installed.
