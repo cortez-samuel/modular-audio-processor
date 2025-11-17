@@ -14,7 +14,7 @@ The prototype build targets the Adafruit Feather RP2040 (8MB external QSPI flash
 ### OLED Display
 The display utilizes custom drivers to interface with the SSD1306 display over SPI. The pins are pre-configured to use the top-left most pins on the Feather RP2040. 
 
-## ADC Signal Input
+### ADC Signal Input
 The ADC initializes pins A0-A3 as ADC channels.
 - Allows for enabling/disabling the of ADC, alog with configuration.
 - Reads from the active ADC channel, and updates that channel to show it has new data.
