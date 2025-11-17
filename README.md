@@ -1,7 +1,17 @@
 # Modular Audio Processor (Prototype Build)
- Text here
 
-## OLED Display
+The prototype build targets the Adafruit Feather RP2040 (8MB external QSPI flash) and focuses on real-world hardware integration with persistent storage and safe concurrent ADC operation during flash programming.
+
+## Completed Work
+
+### Persistent Storage (Flash-backed):
+- Implemented a single-sector, page-aligned flash storage module.
+- Stores application state (effect type, alpha parameter, write counter) in external QSPI flash at a safe offset (4MB).
+- Uses a write counter to track saves and detect stale data on startup.
+- At initialization (`persistent_init()`), the module reads the stored record from flash via XIP (execute-in-place) and stores to an in-memory cache.
+- On save (`persistent_save()`), the new state is written to flash with automatic counter increment and post-write verification.
+
+### OLED Display
 The display utilizes custom drivers to interface with the SSD1306 display over SPI. The pins are pre-configured to use the top-left most pins on the Feather RP2040 (A0, A1, A2, A3, 24). 
 
 ## Building
