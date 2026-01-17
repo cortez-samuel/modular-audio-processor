@@ -1,0 +1,8 @@
+Noah McGlothlin :: 1/16/2026 6:00pm - 9:00pm
+  -- researched the rp2040 PIO and familiarized with pico-sdk PIO examples.
+  -- -- basically just assembly with very little algebraic functionality, still good
+        for communication though. Need to be careful about PIO configuration and initialization.
+  -- researched I2S transmission
+  -- made plan for I2S transmission .pio file
+  -- -- called I2S_naive because has no safety to ensure correct channel data.
+        need to figure out better way, but making this to be an option.
