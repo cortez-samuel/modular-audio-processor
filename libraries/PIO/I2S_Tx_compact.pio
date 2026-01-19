@@ -1,4 +1,4 @@
-.program I2S_compact
+.program I2S_Tx_compact
 .side_set 2
 
 ; ========== I2S_Transmit ==========
@@ -56,7 +56,7 @@ MAIN:
 % c-sdk {
 #include "hardware/clocks.h"
 
-static inline void I2S_compact_init(
+static inline void I2S_Tx_compact_init(
         PIO pio, uint sm, uint offset, 
         uint BCLK_pin, uint WS_pin, uint SD_pin, 
         float fs,
@@ -101,13 +101,13 @@ static inline void I2S_compact_init(
     pio_sm_put_blocking(pio, sm, WS_frame_size-4);
 }
 
-static inline void I2S_compact_raw_write(PIO pio, uint sm, 
+static inline void I2S_Tx_compact_raw_write(PIO pio, uint sm, 
         uint32_t data
 ) {
     pio_sm_put_blocking(pio, sm, data);
 }
 
-static inline void I2S_compact_mono_write(PIO pio, uint sm, 
+static inline void I2S_Tx_compact_mono_write(PIO pio, uint sm, 
         uint16_t data, uint WS_frame_size
 ) {
     uint32_t concat = (data << (16 - WS_frame_size) << 16) | 
@@ -115,7 +115,7 @@ static inline void I2S_compact_mono_write(PIO pio, uint sm,
     pio_sm_put_blocking(pio, sm, concat);
 }   
 
-static inline void I2S_compact_stereo_write(PIO pio, uint sm, 
+static inline void I2S_Tx_compact_stereo_write(PIO pio, uint sm, 
         uint16_t lc, uint16_t rc, uint WS_frame_size
 ) {
     uint32_t concat = (lc << (16 - WS_frame_size) << 16) |  

@@ -1,4 +1,4 @@
-.program I2S_naive
+.program I2S_Tx_naive
 .side_set 2
 
 ; ========== I2S_Transmit (I2S_Tx) ==========
@@ -50,7 +50,7 @@ MAIN:
 % c-sdk {
 #include "hardware/clocks.h"
 
-static inline void I2S_naive_init(
+static inline void I2S_Tx_naive_init(
         PIO pio, uint sm, uint offset, 
         uint BCLK_pin, uint WS_pin, uint SD_pin, 
         float fs,
@@ -89,15 +89,22 @@ static inline void I2S_naive_init(
     pio_sm_init(pio, sm, offset, &c);
     pio_sm_set_enabled(pio, sm, true);
 }
- 
-static inline void I2S_naive_mono_write(PIO pio, uint sm, 
+
+static inline void I2S_Tx_naive_raw_write(PIO pio, uint sm, 
+        uint32_t lc, uitn32_t rc
+) {
+    pio_sm_put_blocking(pio, sm, lc);
+    pio_sm_put_blocking(pio, sm, rc);
+}
+
+static inline void I2S_Tx_naive_mono_write(PIO pio, uint sm, 
         uint32_t data, uint WS_frame_size
 ) {
     pio_sm_put_blocking(pio, sm, data << (32 - WS_frame_size));
     pio_sm_put_blocking(pio, sm, data << (32 - WS_frame_size));
 }
 
-static inline void I2S_naive_stereo_write(PIO pio, uint sm, 
+static inline void I2S_Tx_naive_stereo_write(PIO pio, uint sm, 
         uint32_t lc, uint32_t rc, uint WS_frame_size
 ) {
     pio_sm_put_blocking(pio, sm, lc << (32 - WS_frame_size));
