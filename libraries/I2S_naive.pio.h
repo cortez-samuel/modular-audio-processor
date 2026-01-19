@@ -82,16 +82,16 @@ static inline void I2S_naive_init(
     pio_sm_set_enabled(pio, sm, true);
 }
 static inline void I2S_naive_mono_write(PIO pio, uint sm, 
-        uint32_t data
+        uint32_t data, uint WS_frame_size
 ) {
-    pio_sm_put_blocking(pio, sm, data);
-    pio_sm_put_blocking(pio, sm, data);
+    pio_sm_put_blocking(pio, sm, data << (32 - WS_frame_size));
+    pio_sm_put_blocking(pio, sm, data << (32 - WS_frame_size));
 }
 static inline void I2S_naive_stereo_write(PIO pio, uint sm, 
-        uint32_t lc, uint32_t rc
+        uint32_t lc, uint32_t rc, uint WS_frame_size
 ) {
-    pio_sm_put_blocking(pio, sm, lc);
-    pio_sm_put_blocking(pio, sm, rc);
+    pio_sm_put_blocking(pio, sm, lc << (32 - WS_frame_size));
+    pio_sm_put_blocking(pio, sm, rc << (32 - WS_frame_size));
 }
 
 #endif

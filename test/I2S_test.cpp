@@ -1,4 +1,5 @@
 #include "../libraries/I2S_naive.pio.h"
+#include "../libraries/I2S_compact.pio.h"
 
 #include "hardware/pio.h"
 
@@ -14,10 +15,10 @@ int main() {
     uint sm;
     uint offset;
 
-    pio_claim_free_sm_and_add_program(&I2S_naive_program, &pio, &sm, &offset);
-    I2S_naive_init(pio, sm, offset, 2, 3, 1, 1000, 12);
+    pio_claim_free_sm_and_add_program(&I2S_compact_program, &pio, &sm, &offset);
+    I2S_compact_init(pio, sm, offset, 2, 3, 1, 1000, 12);
 
     while (1) {
-        I2S_naive_stereo_write(pio, sm, 0xFF000000, 0xAAA00000); // check transmitting correctly w oscilloscope
+        I2S_compact_stereo_write(pio, sm, 0xFF0, 0xAAA, 12); // check transmitting correctly w oscilloscope
     }
 }
