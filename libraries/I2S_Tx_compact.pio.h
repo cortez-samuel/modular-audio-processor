@@ -8,15 +8,15 @@
 #include "hardware/pio.h"
 #endif
 
-// ----------- //
-// I2S_compact //
-// ----------- //
+// -------------- //
+// I2S_Tx_compact //
+// -------------- //
 
-#define I2S_compact_wrap_target 4
-#define I2S_compact_wrap 19
-#define I2S_compact_pio_version 0
+#define I2S_Tx_compact_wrap_target 4
+#define I2S_Tx_compact_wrap 19
+#define I2S_Tx_compact_pio_version 0
 
-static const uint16_t I2S_compact_program_instructions[] = {
+static const uint16_t I2S_Tx_compact_program_instructions[] = {
     0xf820, //  0: set    x, 0            side 3
     0x98a0, //  1: pull   block           side 3
     0xb847, //  2: mov    y, osr          side 3
@@ -42,25 +42,25 @@ static const uint16_t I2S_compact_program_instructions[] = {
 };
 
 #if !PICO_NO_HARDWARE
-static const struct pio_program I2S_compact_program = {
-    .instructions = I2S_compact_program_instructions,
+static const struct pio_program I2S_Tx_compact_program = {
+    .instructions = I2S_Tx_compact_program_instructions,
     .length = 20,
     .origin = -1,
-    .pio_version = I2S_compact_pio_version,
+    .pio_version = I2S_Tx_compact_pio_version,
 #if PICO_PIO_VERSION > 0
     .used_gpio_ranges = 0x0
 #endif
 };
 
-static inline pio_sm_config I2S_compact_program_get_default_config(uint offset) {
+static inline pio_sm_config I2S_Tx_compact_program_get_default_config(uint offset) {
     pio_sm_config c = pio_get_default_sm_config();
-    sm_config_set_wrap(&c, offset + I2S_compact_wrap_target, offset + I2S_compact_wrap);
+    sm_config_set_wrap(&c, offset + I2S_Tx_compact_wrap_target, offset + I2S_Tx_compact_wrap);
     sm_config_set_sideset(&c, 2, false, false);
     return c;
 }
 
 #include "hardware/clocks.h"
-static inline void I2S_compact_init(
+static inline void I2S_Tx_compact_init(
         PIO pio, uint sm, uint offset, 
         uint BCLK_pin, uint WS_pin, uint SD_pin, 
         float fs,
@@ -72,7 +72,7 @@ static inline void I2S_compact_init(
     assert(WS_frame_size <= 16);
     const uint cycles_per_edge = 2;
         // get default config
-    pio_sm_config c = I2S_compact_program_get_default_config(offset);
+    pio_sm_config c = I2S_Tx_compact_program_get_default_config(offset);
         // set pints
     sm_config_set_out_pins(&c, SD_pin, 1);
     sm_config_set_sideset_pins(&c, BCLK_pin);
@@ -83,9 +83,10 @@ static inline void I2S_compact_init(
     sm_config_set_clkdiv(&c, clkdiv);
         // pin mask + pindir + pin initialization
     uint64_t pin_mask = (1 << SD_pin) | (1 << WS_pin) | (1 << BCLK_pin);
-    uint64_t pin_default = (0 << SD_pin) | (1 << WS_pin) | (1 << BCLK_pin);
-    pio_sm_set_pins_with_mask64(pio, sm, pin_default, pin_mask);
-    pio_sm_set_pindirs_with_mask64(pio, sm, pin_mask, pin_mask);
+    uint64_t pindir_mask = (1 << SD_pin) | (1 << WS_pin) | (1 << BCLK_pin);
+    uint64_t pinDefault_mask = (0 << SD_pin) | (1 << WS_pin) | (1 << BCLK_pin);
+    pio_sm_set_pins_with_mask64(pio, sm, pinDefault_mask, pin_mask);
+    pio_sm_set_pindirs_with_mask64(pio, sm, pindir_mask, pin_mask);
     pio_gpio_init(pio, BCLK_pin);
     pio_gpio_init(pio, WS_pin);
     pio_gpio_init(pio, SD_pin);
@@ -95,19 +96,19 @@ static inline void I2S_compact_init(
         // put WS_frame_size-4 on TxFIFO to be pulled into `y` register
     pio_sm_put_blocking(pio, sm, WS_frame_size-4);
 }
-static inline void I2S_compact_raw_write(PIO pio, uint sm, 
+static inline void I2S_Tx_compact_raw_write(PIO pio, uint sm, 
         uint32_t data
 ) {
     pio_sm_put_blocking(pio, sm, data);
 }
-static inline void I2S_compact_mono_write(PIO pio, uint sm, 
+static inline void I2S_Tx_compact_mono_write(PIO pio, uint sm, 
         uint16_t data, uint WS_frame_size
 ) {
     uint32_t concat = (data << (16 - WS_frame_size) << 16) | 
                       (data << (16 - WS_frame_size) << (16 - WS_frame_size));
     pio_sm_put_blocking(pio, sm, concat);
 }   
-static inline void I2S_compact_stereo_write(PIO pio, uint sm, 
+static inline void I2S_Tx_compact_stereo_write(PIO pio, uint sm, 
         uint16_t lc, uint16_t rc, uint WS_frame_size
 ) {
     uint32_t concat = (lc << (16 - WS_frame_size) << 16) |  

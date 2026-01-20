@@ -1,0 +1,93 @@
+.program I2S_Rx_naive
+
+.program I2S_Rx_naive; ========== I2S_Recieve (I2S_Rx) ==========
+;       ** a brief discription of I2S protocol **
+;   Serial Clock    (BCLK)
+;   Word Select     (WS)
+;   Serial Data     (SD)
+;
+;   BCLK    :: synchronization clock for the serial data line (SD)
+;   WS      :: Selects the audio-channel the serial data belongs to
+;               0 => Left Channel
+;               1 => Right Channel
+;               -- Write on BCLK falling edge (as transmitter)
+;               -- Read on BCLK rising edge (as reciever)
+;               -- Changes one BCLK period before SD writes
+;   SD      :: The serial data, 2's-complement, MSB first
+;               -- Write on BCLK falling edge (as transmitter)
+;               -- Read on BCLK rising edge (as reciever)
+;
+;   === Transmitter PINS ===
+;       ** output pins for this pio program **
+;   -- BCLK :: input pin 1
+;   -- WS   :: input pin 2
+;   -- SD   :: input pin 0
+
+
+; ===== SETUP =====
+wait 1 pin 2    ; wait for rc frame (may be during instruction running)
+wait 0 pin 2    ; wait for lc frame to start (BCLK falling edge here)
+wait 1 pin 1    ; WS changed a cycle before channel data
+
+
+; ===== MAIN =====
+.wrap_target
+MAIN:
+    wait 0 pin 1
+    wait 1 pin 1
+    in pins, 1
+.wrap
+
+
+% c-sdk {
+#include "hardware/clocks.h"
+#include "hardware/gpio.h"
+
+static inline void I2S_Rx_naive_init(
+        PIO pio, uint sm, uint offset,
+        uint BCLK_pin, uint WS_pin, uint SD_pin,
+        float fs,
+        uint WS_frame_size
+) {
+        // input validation
+    assert(BCLK_pin == SD_pin + 1);
+    assert(WS_pin == SD_pin + 2);
+    const uint cycles_per_edge = 2;
+
+        // get default config
+    pio_sm_config c = I2S_Rx_naive_program_get_default_config(offset);
+
+        // set pins
+    sm_config_set_in_pins(&c, SD_pin);
+    sm_config_set_in_pin_count(&c, 3);
+
+        // set isr and SHIFCTRL_PUSH_THRESH
+    sm_config_set_in_shift(&c, false, true, WS_frame_size);
+
+        // set clkdiv (sample 2 times per BCLK edge)
+    float clkdiv = clock_get_hz(clk_sys) / (2.0 * fs * cycles_per_edge * WS_frame_size * 2.0);
+    sm_config_set_clkdiv(&c, clkdiv);
+
+        // pin mask + pindir + pin initialization
+    uint64_t pin_mask = (1 << SD_pin) | (1 << WS_pin) | (1 << BCLK_pin);
+    uint64_t pindir_mask = (0 << SD_pin) | (0 << WS_pin) | (0 << BCLK_pin);
+
+    pio_sm_set_pindirs_with_mask64(pio, sm, pindir_mask, pin_mask);
+
+    pio_gpio_init(pio, BCLK_pin);
+    pio_gpio_init(pio, WS_pin);
+    pio_gpio_init(pio, SD_pin);
+
+        // init + enable pio sm
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+static inline void I2S_Rx_naive_read(PIO pio, uint sm, 
+        uint32_t* lc, uint32_t* rc
+) {
+    *lc = pio_sm_get_blocking(pio, sm);
+    *rc = pio_sm_get_blocking(pio, sm);
+}
+
+%}

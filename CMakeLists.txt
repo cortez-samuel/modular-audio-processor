@@ -32,7 +32,7 @@ include(pico_sdk_import.cmake)
 
 
     # name project the name of executable being run/tested
-project(I2S_test C CXX ASM)
+project(I2S_Rx_test C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -75,20 +75,37 @@ target_include_directories(adc_test PRIVATE
 pico_add_extra_outputs(adc_test)
 
 ########## I2S / PIO ##########
-add_executable(I2S_test     
-    test/I2S_test.cpp
+add_executable(I2S_Tx_test     
+    test/I2S_Tx_test.cpp
 )
-pico_generate_pio_header(I2S_test ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_naive.pio)
-pico_generate_pio_header(I2S_test ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_compact.pio)
+pico_generate_pio_header(I2S_Tx_test ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_naive.pio)
+pico_generate_pio_header(I2S_Tx_test ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_compact.pio)
 
-pico_enable_stdio_uart(I2S_test 0)
-pico_enable_stdio_usb(I2S_test 1)
+pico_enable_stdio_uart(I2S_Tx_test 0)
+pico_enable_stdio_usb(I2S_Tx_test 1)
 
-target_link_libraries(I2S_test
+target_link_libraries(I2S_Tx_test
     pico_stdlib
     hardware_pio
 )
-target_include_directories(I2S_test PRIVATE 
+target_include_directories(I2S_Tx_test PRIVATE 
     ${CMAKE_CURRENT_LIST_DIR}
 )
-pico_add_extra_outputs(I2S_test)
+pico_add_extra_outputs(I2S_Tx_test)
+
+add_executable(I2S_Rx_test
+    test/I2S_Rx_test.cpp
+)
+pico_generate_pio_header(I2S_Rx_test ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Rx_naive.pio)
+
+pico_enable_stdio_uart(I2S_Rx_test 0)
+pico_enable_stdio_usb(I2S_Rx_test 1)
+
+target_link_libraries(I2S_Rx_test
+    pico_stdlib
+    hardware_pio
+)
+target_include_directories(I2S_Rx_test PRIVATE 
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+pico_add_extra_outputs(I2S_Rx_test)

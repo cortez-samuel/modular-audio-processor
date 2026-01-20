@@ -69,7 +69,7 @@ static inline void I2S_Tx_compact_init(
     const uint cycles_per_edge = 2;
         
         // get default config
-    pio_sm_config c = I2S_compact_program_get_default_config(offset);
+    pio_sm_config c = I2S_Tx_compact_program_get_default_config(offset);
 
         // set pints
     sm_config_set_out_pins(&c, SD_pin, 1);
@@ -84,10 +84,11 @@ static inline void I2S_Tx_compact_init(
 
         // pin mask + pindir + pin initialization
     uint64_t pin_mask = (1 << SD_pin) | (1 << WS_pin) | (1 << BCLK_pin);
-    uint64_t pin_default = (0 << SD_pin) | (1 << WS_pin) | (1 << BCLK_pin);
+    uint64_t pindir_mask = (1 << SD_pin) | (1 << WS_pin) | (1 << BCLK_pin);
+    uint64_t pinDefault_mask = (0 << SD_pin) | (1 << WS_pin) | (1 << BCLK_pin);
 
-    pio_sm_set_pins_with_mask64(pio, sm, pin_default, pin_mask);
-    pio_sm_set_pindirs_with_mask64(pio, sm, pin_mask, pin_mask);
+    pio_sm_set_pins_with_mask64(pio, sm, pinDefault_mask, pin_mask);
+    pio_sm_set_pindirs_with_mask64(pio, sm, pindir_mask, pin_mask);
 
     pio_gpio_init(pio, BCLK_pin);
     pio_gpio_init(pio, WS_pin);
