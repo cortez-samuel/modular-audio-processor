@@ -1,0 +1,184 @@
+; ========== SPI ==========
+;       ** CPHA = 0 | CPOL = 0 **
+;
+;   Serial Clock            (SCLK) 
+;   Master Outut Slave In   (MOSI)
+;   Master In Slave Out     (MISO)
+;   Chip Select             (CS)   
+;
+;   SCLK    :: synchronization clock for the serial MOSI and MISO line 
+;   MOSI    :: serial data coming from the master (Tx) to the slave (Rx)
+;               -- MSB first 
+;               -- write on SCLK falling edge (Tx)
+;               -- read on SCLK rising edge (Rx)
+;   MISO    :: serial data coming from the slave (Rx) to the master (Tx)
+;               -- MSB first 
+;               -- write on SCLK falling edge (Rx)
+;               -- read on SCLK rising edge (Tx)
+;   CS      :: indicates start transaction with a specific slave
+;               -- active low
+;
+
+.program SPI_Master
+.side_set 1
+; will be problems if not pulling or writing to RxFIFO and TxFIFO frequenctly enough
+
+; frame-size configured with SHIFCTRL_PULL_THRESH
+
+;   === SPI_Master PINS ===
+;   -- SCLK :: side-set pin 0
+;   -- MOSI :: OUT pin 0
+;   -- MISO :: IN pin 0
+;   -- CS   :: GPIO controlled
+
+; ===== SETUP =====
+
+; ===== MAIN =====
+.wrap_target
+MAIN:
+    out     pins, 1     side 0
+    in      pins, 1     side 1
+.wrap
+
+.program SPI_Slave
+; will be problems if not pulling or writing to RxFIFO and TxFIFO frequently enough
+
+; frame-size configured with SHIFCTRL_PUSH_THRESH
+; <= 3 instr per edge
+
+;   === SPI_Slave PINS ===
+;   -- SCLK :: IN pin 1
+;   -- MOSI :: IN pin 0
+;   -- MISO :: OUT pin 0
+;   -- CS   :: IN pin 2
+
+; ===== SETUP =====
+
+; ===== MAIN =====
+MAIN:
+    wait    0 pin 2
+    wait    0 pin 1
+    out     pins, 1
+    wait    1 pin 1
+    in      pins, 1
+.wrap
+
+
+% c-sdk {
+#include "hardware/clocks.h"
+
+static inline void SPI_Master_init(
+        PIO pio, uint sm, uint offset,
+        uint SCLK_pin, uint MOSI_pin, uint MISO_pin, uint CS_pin, 
+        uint baud, uint frame_size
+) {
+        // get default config
+    pio_sm_config c = SPI_Master_program_get_default_config(offset);
+        
+        // set in/out pins and shift
+    sm_config_set_out_pins(&c, MOSI_pin, 1);
+    sm_config_set_in_pins(&c, MISO_pin);
+    sm_config_set_in_pin_count(&c, 1);
+    sm_config_set_sideset_pins(&c, SCLK_pin);
+
+    sm_config_set_out_shift(&c, false, true, frame_size);
+    sm_config_set_in_shift(&c, false, true, frame_size);
+    
+        // set clkdiv
+    float clkdiv = clock_get_hz(clk_sys) / (baud * frame_size * 2.0);
+    sm_config_set_clkdiv(&c, clkdiv);
+
+        // initialize pins
+    uint32_t pin_mask = (1 << SCLK_pin) | (1 << MOSI_pin) | (1 << MISO_pin);
+    uint32_t pindir_mask = (1 << SCLK_pin) | (1 << MOSI_pin) | (0 << MISO_pin);
+    uint32_t pinDefault_mask = (0 << SCLK_pin) | (0 << MOSI_pin);
+
+    pio_sm_set_pins_with_mask(pio, sm, pinDefault_mask, pin_mask);
+    pio_sm_set_pindirs_with_mask(pio, sm, pindir_mask, pin_mask);
+
+    pio_gpio_init(pio, SCLK_pin);
+    pio_gpio_init(pio, MISO_pin);
+    pio_gpio_init(pio, MOSI_pin);
+
+    gpio_init(CS_pin);
+    gpio_set_dir(CS_pin, GPIO_OUT);
+    
+        // initialize + enable pio sm
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+static inline void SPI_Master_raw_write(
+        PIO pio, uint sm, uint32_t raw
+) {
+    pio_sm_put_blocking(pio, sm, raw);
+    pio_sm_get_blocking(pio, sm);
+}
+
+static inline void SPI_Master_write(
+    PIO pio, uint sm, uint32_t data, uint frame_size
+) {
+    pio_sm_put_blocking(pio, sm, data << (32 - frame_size));
+    pio_sm_get_blocking(pio, sm);
+}
+
+
+
+
+static inline void SPI_Slave_init( 
+        PIO pio, uint sm, uint offset,
+        uint SCLK_pin, uint MOSI_pin, uint MISO_pin, uint CS_pin,
+        uint baud, uint frame_size
+) {
+        // input validation
+    assert(SCLK_pin == MOSI_pin + 1);
+    assert(CS_pin == MOSI_pin + 2);
+
+        // get default config
+    pio_sm_config c = SPI_Slave_program_get_default_config(offset);
+
+        // set in/out pins and shift 
+    sm_config_set_out_pins(&c, MOSI_pin, 1);
+    sm_config_set_in_pins(&c, MISO_pin);
+    sm_config_set_in_pin_count(&c, 3);
+
+    sm_config_set_out_shift(&c, false, true, frame_size);
+    sm_config_set_in_shift(&c, false, true, frame_size);
+    
+        // set clkdiv
+    float clkdiv = clock_get_hz(clk_sys) / (baud * frame_size * 2.0 * 4.0);
+    sm_config_set_clkdiv(&c, clkdiv);
+
+        // initialize pins
+    uint32_t pin_mask = (1 << SCLK_pin) | (1 << MOSI_pin) | (1 << MISO_pin) | (1 << CS_pin);
+    uint32_t pindir_mask = (0 << SCLK_pin) | (0 << MOSI_pin) | (1 << MISO_pin) | (0 << CS_pin);
+    uint32_t pinDefault_mask = (0 << MISO_pin);
+
+    pio_sm_set_pins_with_mask(pio, sm, pinDefault_mask, pin_mask);
+    pio_sm_set_pindirs_with_mask(pio, sm, pindir_mask, pin_mask);
+
+    pio_gpio_init(pio, SCLK_pin);
+    pio_gpio_init(pio, MISO_pin);
+    pio_gpio_init(pio, MOSI_pin);
+    pio_gpio_init(pio, CS_pin);
+    
+        // initialize + enable pio sm
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+static inline void SPI_Slave_raw_read(
+        PIO pio, uint sm, uint32_t* raw
+) {
+    pio_sm_put_blocking(pio, sm, 0);
+    *raw = pio_sm_get_blocking(pio, sm);
+}
+
+static inline void SPI_Slave_read(
+        PIO pio, uint sm, uint32_t* dest, uint frame_size
+) {
+    pio_sm_put_blocking(pio, sm, 0);
+    *dest = pio_sm_get_blocking(pio, sm);
+}
+
+%}

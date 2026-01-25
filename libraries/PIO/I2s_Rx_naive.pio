@@ -1,6 +1,6 @@
 .program I2S_Rx_naive
 
-.program I2S_Rx_naive; ========== I2S_Recieve (I2S_Rx) ==========
+; ========== I2S_Recieve (I2S_Rx) ==========
 ;       ** a brief discription of I2S protocol **
 ;   Serial Clock    (BCLK)
 ;   Word Select     (WS)
@@ -19,9 +19,9 @@
 ;
 ;   === Transmitter PINS ===
 ;       ** output pins for this pio program **
-;   -- BCLK :: input pin 1
-;   -- WS   :: input pin 2
-;   -- SD   :: input pin 0
+;   -- BCLK :: IN pin 1
+;   -- WS   :: IN pin 2
+;   -- SD   :: IN pin 0
 
 
 ; ===== SETUP =====

@@ -1,4 +1,4 @@
-Noah McGlothlin :: 1/16/2026 6:00pm - 10:45pm  2am - 3am
+Noah McGlothlin :: 1/16/2026 6:00pm - 10:45pm -- 1/18/2026 2am - 3am
   -- researched the rp2040 PIO and familiarized with pico-sdk PIO examples.
   -- -- basically just assembly with very little algebraic functionality, still good
         for communication though. Need to be careful about PIO configuration and initialization.
@@ -9,3 +9,33 @@ Noah McGlothlin :: 1/16/2026 6:00pm - 10:45pm  2am - 3am
   -- -- implemented I2S_naive and made I2S_test file for testing transmission with oscilloscope. 
   -- made plan for another I2S transfer, with security so data stays on correct channel
   -- -- data limited to 16 bits per channel max, trying to figure out one which allows for <= 32
+
+Noah McGlothlin :: 1/18/2026 8:00pm - 1/19/2026 1:30am 
+  -- Implemented prior plan and got working 
+  -- May need to make a class for I2S initialization and reading/writing to make usage 
+     simpler and easier to debug
+
+Noah McGlothlin :: 1/19/2026 12:00pm - 4:30pm
+  -- Made filenames more accurate
+  -- Designed plan for I2S read that should be able to work for the continuous sampling / sending 
+     of data in the I2S format
+  -- -- May break if not read from often enough
+
+Noah McGlothlin :: 1/20/2026 11:30am - 2:30pm
+  -- Implemented I2S_naive read plan 
+  -- -- Requires the input pins (bclk, sd, ws) in sequential order (ie not 1 3 20)
+  -- -- Does not ensure data is synched outside of setup phase, 
+        but should be fine with continuous input signlas, which is natural with I2S
+  -- -- -- Errors have been recreated with reseting I2S_Tx machine, but reseting I2S_Rx 
+           machine fixes it
+
+Noah McGlothlin :: 1/22/2026 1:30pm - 6:30pm -- 1/24/2026 12:00pm - 4:30pm
+  -- implemented SPI on PIO. Includes a regular SPI .pio file and a SPI .pio file 
+     specialized for sending bytes.
+  -- -- still need to test both
+  -- Tested SPI_byte (the byte-specialized one) and Tx works for the most part (CS signal 
+     can end a bit early, about a clock edge but should be fine) Rx does not work, need to debug
+  -- -- Ended up being a wiring problem, forgot to change the connections between 
+        the master SCLK, MOSI, MISO, and CS pins and the slave ones. Maybe should make SPI_PIO class 
+        (or something), to help prevent this from happening, and add consecutive-pin checks 
+        to SPI_Byte_Master_init too, to make sure connectiong can be one-to-one.

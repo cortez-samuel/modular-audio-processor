@@ -33,17 +33,17 @@ nop             side 0b00
 .wrap_target
 MAIN:
         ; LC
-    pull noblock                side 0b01
+    pull    noblock                 side 0b01
     MAIN__OUT_LC:
-        out pins, 1             side 0b00
-        jmp !osre, MAIN__OUT_LC side 0b01
-    out pins, 1                 side 0b10
+        out     pins, 1             side 0b00
+        jmp     !osre, MAIN__OUT_LC side 0b01
+    out     pins, 1                 side 0b10
         ; RC   
-    pull noblock                side 0b11
+    pull    noblock                 side 0b11
     MAIN__OUT_RC:
-        out pins, 1             side 0b10
-        jmp !osre, MAIN__OUT_RC side 0b11
-    out pins, 1                 side 0b00
+        out     pins, 1             side 0b10
+        jmp     !osre, MAIN__OUT_RC side 0b11
+    out     pins, 1                 side 0b00
 .wrap
 
 

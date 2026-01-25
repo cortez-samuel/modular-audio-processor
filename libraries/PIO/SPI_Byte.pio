@@ -1,0 +1,224 @@
+.program SPI_Byte_Master
+.side_set 1
+
+; ========== SPI ==========
+;       ** CPHA = 0 | CPOL = 0 **
+;
+;   Serial Clock            (SCLK) 
+;   Master Outut Slave In   (MOSI)
+;   Master In Slave Out     (MISO)
+;   Chip Select             (CS)   
+;
+;   SCLK    :: synchronization clock for the serial MOSI and MISO line 
+;   MOSI    :: serial data coming from the master (Tx) to the slave (Rx)
+;               -- MSB first 
+;               -- write on SCLK falling edge (Tx)
+;               -- read on SCLK rising edge (Rx)
+;   MISO    :: serial data coming from the slave (Rx) to the master (Tx)
+;               -- MSB first 
+;               -- write on SCLK falling edge (Rx)
+;               -- read on SCLK rising edge (Tx)
+;   CS      :: indicates start transaction with a specific slave
+;               -- active low
+
+;   === PINS ===
+;   -- SCLK :: side_set pin 0
+;   -- MOSI :: OUT pin 0
+;   -- MISO :: IN pin 0
+;   -- CS   :: GPIO controlled
+
+; ===== SETUP =====
+
+; ===== MAIN =====
+.wrap_target
+MAIN:
+    out     pins, 1     side 0
+    in      pins, 1     side 1
+.wrap
+
+% c-sdk {
+#include "hardware/clocks.h"
+
+static inline void SPI_Byte_Master_init(
+        PIO pio, uint sm, uint offset,
+        uint SCLK_pin, uint MOSI_pin, uint MISO_pin, uint CS_pin,
+        uint baud,
+        bool full_duplex
+) {
+        // get default config
+    pio_sm_config c = SPI_Byte_Master_program_get_default_config(offset);
+
+        // set in/out pins and shifts
+    sm_config_set_out_pins(&c, MOSI_pin, 1);
+    sm_config_set_in_pins(&c, MISO_pin);
+    sm_config_set_in_pin_count(&c, 1);
+    sm_config_set_sideset_pins(&c, SCLK_pin);
+
+    sm_config_set_out_shift(&c, false, true, 8);
+    sm_config_set_in_shift(&c, false, full_duplex, 8);
+
+        // set clkdiv
+    float clkdiv = clock_get_hz(clk_sys) / (baud * 8.0 * 2.0);
+    sm_config_set_clkdiv(&c, clkdiv);
+
+        // initialize pins
+    uint32_t pin_mask = (1 << SCLK_pin) | (1 << MOSI_pin) | (1 << MISO_pin);
+    uint32_t pindir_mask = (1 << SCLK_pin) | (1 << MOSI_pin) | (0 << MISO_pin);
+    uint32_t pinDefault_mask = (0 << SCLK_pin) | (0 << MOSI_pin);
+
+    pio_sm_set_pins_with_mask(pio, sm, pinDefault_mask, pin_mask);
+    pio_sm_set_pindirs_with_mask(pio, sm, pindir_mask, pin_mask);
+
+    pio_gpio_init(pio, SCLK_pin);
+    pio_gpio_init(pio, MISO_pin);
+    pio_gpio_init(pio, MOSI_pin);
+
+    gpio_init(CS_pin);
+    gpio_set_dir(CS_pin, GPIO_OUT);
+
+        // initialize + enable pio sm
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+static inline void SPI_Byte_Master_w(PIO pio, uint sm, uint CS_pin,
+        uint8_t* src, size_t len
+) {
+    io_rw_8* txfifo = (io_rw_8*)(&pio->txf[sm]);
+    io_rw_8* rxfifo = (io_rw_8*)(&pio->rxf[sm]);
+
+    gpio_put(CS_pin, 0);
+    size_t txRemaining = len, rxRemaining = len;
+    while(txRemaining || rxRemaining) {
+        if (txRemaining && !pio_sm_is_tx_fifo_full(pio, sm)) {
+            *txfifo = *src++;
+            txRemaining--;
+        }
+        if (rxRemaining && !pio_sm_is_rx_fifo_empty(pio, sm)) {
+            (void) *rxfifo;
+            rxRemaining--;
+        }
+    }
+    gpio_put(CS_pin, 1);
+}
+
+static inline void SPI_Byte_master_rw(PIO pio, uint sm, uint CS_pin,
+        uint8_t* src, uint8_t* dest, size_t len
+) {
+    io_rw_8* txfifo = (io_rw_8*)(&pio->txf[sm]);
+    io_rw_8* rxfifo = (io_rw_8*)(&pio->rxf[sm]);
+
+    gpio_put(CS_pin, 0);
+    size_t txRemaining = len, rxRemaining = len;
+    while(txRemaining || rxRemaining) {
+        if (txRemaining && !pio_sm_is_tx_fifo_full(pio, sm)) {
+            *txfifo = *src++;
+            txRemaining--;
+        }
+        if (rxRemaining && !pio_sm_is_rx_fifo_empty(pio, sm)) {
+            *dest++ = *rxfifo;
+            rxRemaining--;
+        }        
+    }
+    gpio_put(CS_pin, 1);
+}
+
+%}
+
+
+; =========================
+
+.program SPI_Byte_Slave
+
+;   === PINS ===
+;   -- SCLK :: IN pin 1
+;   -- MOSI :: IN pin 0
+;   -- MISO :: OUT pin 0
+;   -- CS   :: IN pin 2
+
+; ===== SETUP =====
+set     x, 0
+    ; wait for end of current transaction
+wait    1 pin 2
+
+; ===== MAIN =====
+.wrap_target
+MAIN:
+        ; wait for CS active
+    wait    0 pin 2
+        ; pull byte of data to send
+    pull    noblock
+
+    MAIN__Rx__Send:
+        wait    0 pin 1
+        out     pins, 1
+          ; read data on rising edge
+        wait    1 pin 1
+        in      pins, 1
+        jmp     !osre, MAIN__Rx__Send
+.wrap
+
+
+% c-sdk {
+
+static inline void SPI_Byte_Slave_init(
+        PIO pio, uint sm, uint offset,
+        uint SCLK_pin, uint MOSI_pin, uint MISO_pin, uint CS_pin,
+        uint baud,
+        bool full_duplex
+) {
+        // input validation
+    assert(SCLK_pin == MOSI_pin + 1);
+    assert(CS_pin == MOSI_pin + 2);
+
+        // get default config
+    pio_sm_config c = SPI_Byte_Slave_program_get_default_config(offset);
+
+        // set in/out pins and shift
+    sm_config_set_out_pins(&c, MISO_pin, 1);
+    sm_config_set_in_pins(&c, MOSI_pin);
+    sm_config_set_in_pin_count(&c, 3);
+    
+    sm_config_set_out_shift(&c, false, false, 8);
+    sm_config_set_in_shift(&c, false, true, 8);
+
+        // set clkdiv
+
+        // initialize pins
+    uint32_t pin_mask = (1 << SCLK_pin) | (1 << MOSI_pin) | (1 << MISO_pin) | (1 << CS_pin);
+    uint32_t pindir_mask = (0 << SCLK_pin) | (0 << MOSI_pin) | (1 << MISO_pin) | (0 << CS_pin);
+    uint32_t pinDefault_mask = (0 << MISO_pin);
+
+    pio_sm_set_pins_with_mask(pio, sm, pinDefault_mask, pin_mask);
+    pio_sm_set_pindirs_with_mask(pio, sm, pindir_mask, pin_mask);
+
+    pio_gpio_init(pio, SCLK_pin);
+    pio_gpio_init(pio, MISO_pin);
+    pio_gpio_init(pio, MOSI_pin);
+    pio_gpio_init(pio, CS_pin);
+
+        // initialize + enable pio sm 
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+static inline size_t SPI_Byte_Slave_r(PIO pio, uint sm, uint CS_pin,
+        uint8_t* dest, size_t max_len
+) {
+    io_rw_8* rxfifo = (io_rw_8*)(&pio->rxf[sm]);
+
+    size_t len = 0;
+    while (gpio_get(CS_pin)) { tight_loop_contents(); }
+    while (!gpio_get(CS_pin)) {
+        if (len < max_len && !pio_sm_is_rx_fifo_empty(pio, sm)) {
+            *dest++ = *rxfifo;
+            len++;
+        }
+        if (len >= max_len && !pio_sm_is_rx_fifo_empty(pio, sm)) {
+            (void) *rxfifo;
+        }
+    }
+    return len;
+}
+
+%}

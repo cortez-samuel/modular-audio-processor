@@ -32,7 +32,7 @@ include(pico_sdk_import.cmake)
 
 
     # name project the name of executable being run/tested
-project(I2S_Rx_test C CXX ASM)
+project(SPI_master_pio_test C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -109,3 +109,22 @@ target_include_directories(I2S_Rx_test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(I2S_Rx_test)
+
+########## SPI PIO ##########
+add_executable(SPI_master_pio_test
+    test/SPI_master_pio_test.cpp
+)
+pico_generate_pio_header(SPI_master_pio_test ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/SPI.pio)
+pico_generate_pio_header(SPI_master_pio_test ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/SPI_Byte.pio)
+
+pico_enable_stdio_uart(SPI_master_pio_test 0)
+pico_enable_stdio_usb(SPI_master_pio_test 1)
+
+target_link_libraries(SPI_master_pio_test
+    pico_stdlib
+    hardware_pio
+)
+target_include_directories(SPI_master_pio_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+pico_add_extra_outputs(SPI_master_pio_test)
