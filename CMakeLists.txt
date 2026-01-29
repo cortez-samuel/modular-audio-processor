@@ -128,3 +128,29 @@ target_include_directories(SPI_master_pio_test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(SPI_master_pio_test)
+
+
+########## MAIN MASTER ##########
+add_executable(main_master     
+    test/main_master.cpp
+    libraries/oled.cpp
+)
+pico_generate_pio_header(main_master ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_naive.pio)
+pico_generate_pio_header(main_master ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_compact.pio)
+pico_generate_pio_header(main_master ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Rx_naive.pio)
+
+pico_enable_stdio_uart(main_master 0)
+pico_enable_stdio_usb(main_master 1)
+
+target_link_libraries(main_master
+    pico_stdlib
+    hardware_pio
+    hardware_adc
+    hardware_spi
+    hardware_dma
+    hardware_irq
+)
+target_include_directories(main_master PRIVATE 
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+pico_add_extra_outputs(main_master)
