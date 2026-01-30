@@ -7,8 +7,8 @@
 #include "stdint.h"
 
 #define SPI_PORT spi1
-#define PIN_SCK 26  //SCL, A0 on feather
-#define PIN_TX 27   //SDA, A1 on feather
+#define PIN_SCK 10  //SCL, 10 on feather
+#define PIN_TX 11   //SDA, 11 on feather
 #define PIN_RST 28  //RES, A2 on feather
 #define PIN_DC 29   //DC,  A3 on feather
 #define PIN_CS 24   //CS,  24 on feather

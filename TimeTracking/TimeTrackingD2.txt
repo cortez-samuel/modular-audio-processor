@@ -39,3 +39,30 @@ Noah McGlothlin :: 1/22/2026 1:30pm - 6:30pm -- 1/24/2026 12:00pm - 4:30pm
         the master SCLK, MOSI, MISO, and CS pins and the slave ones. Maybe should make SPI_PIO class 
         (or something), to help prevent this from happening, and add consecutive-pin checks 
         to SPI_Byte_Master_init too, to make sure connectiong can be one-to-one.
+
+Samuel Cortez :: 1/20/26 5:30pm - 7:00pm
+  -- Arduino bug fixing
+  -- Began port to C
+
+Eric Reichard :: 1/20/26 5:30pm - 7:00pm
+  -- Arduino bug fixing
+  -- Began port to C
+
+Eric Reichard :: 1/26/26 7:00pm - 10:00pm
+  -- OnShape modeling for 3D printed casing
+
+Eric Reichard :: 1/27/26 8:00pm - 10:00pm
+  -- More work on C porting
+  -- Spent a while trying to fix something with my VSCode, some issue with CMake-Tools
+
+Eric Reichard :: 1/29/26 6:00am - 10:00am
+  -- I2S PIO implementation in a main file
+  -- Using the display conflicts with the I2S, need to figure that out
+  -- Because of that, currently just the I2S is in main_master, which works fine.
+
+Samuel Cortez :: 1/29/26 5:00pm - 10:00pm
+  -- Tried to fix I2S communication
+  -- Studied the C++ implementation of the I2S Arduino Library to continue our porting process
+  -- Unsuccessful, there still appears to be a bug in which the transmission from one module to another is heavily delayed.
+  -- Additionally, the waveform on the receiving module partially resembles the waveform in the transmitting module, being cut off at times.
+  -- Fixed issue related to FFT mode being overly sensitive to noise
