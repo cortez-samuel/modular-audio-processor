@@ -108,7 +108,7 @@ static inline void SPI_Master_init(
     gpio_set_dir(CS_pin, GPIO_OUT);
         // initialize + enable pio sm
     pio_sm_init(pio, sm, offset, &c);
-    pio_sm_set_enabled(pio, sm, true);
+    pio_sm_set_enabled(pio, sm, false);
 }
 static inline void SPI_Master_raw_write(
         PIO pio, uint sm, uint32_t raw
@@ -153,7 +153,7 @@ static inline void SPI_Slave_init(
     pio_gpio_init(pio, CS_pin);
         // initialize + enable pio sm
     pio_sm_init(pio, sm, offset, &c);
-    pio_sm_set_enabled(pio, sm, true);
+    pio_sm_set_enabled(pio, sm, false);
 }
 static inline void SPI_Slave_raw_read(
         PIO pio, uint sm, uint32_t* raw

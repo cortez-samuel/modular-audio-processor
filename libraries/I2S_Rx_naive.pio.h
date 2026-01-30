@@ -75,7 +75,7 @@ static inline void I2S_Rx_naive_init(
     pio_gpio_init(pio, SD_pin);
         // init + enable pio sm
     pio_sm_init(pio, sm, offset, &c);
-    pio_sm_set_enabled(pio, sm, true);
+    pio_sm_set_enabled(pio, sm, false);
 }
 static inline void I2S_Rx_naive_read(PIO pio, uint sm, 
         uint32_t* lc, uint32_t* rc

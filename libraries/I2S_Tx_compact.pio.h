@@ -92,7 +92,7 @@ static inline void I2S_Tx_compact_init(
     pio_gpio_init(pio, SD_pin);
         // init + enable pio sm
     pio_sm_init(pio, sm, offset, &c);
-    pio_sm_set_enabled(pio, sm, true);
+    pio_sm_set_enabled(pio, sm, false);
         // put WS_frame_size-4 on TxFIFO to be pulled into `y` register
     pio_sm_put_blocking(pio, sm, WS_frame_size-4);
 }

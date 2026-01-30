@@ -73,7 +73,7 @@ static inline void SPI_Byte_Master_init(
     gpio_set_dir(CS_pin, GPIO_OUT);
         // initialize + enable pio sm
     pio_sm_init(pio, sm, offset, &c);
-    pio_sm_set_enabled(pio, sm, true);
+    pio_sm_set_enabled(pio, sm, false);
 }
 static inline void SPI_Byte_Master_w(PIO pio, uint sm, uint CS_pin,
         uint8_t* src, size_t len

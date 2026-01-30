@@ -105,7 +105,7 @@ static inline void SPI_Master_init(
     
         // initialize + enable pio sm
     pio_sm_init(pio, sm, offset, &c);
-    pio_sm_set_enabled(pio, sm, true);
+    pio_sm_set_enabled(pio, sm, false);
 }
 
 static inline void SPI_Master_raw_write(
@@ -164,7 +164,7 @@ static inline void SPI_Slave_init(
     
         // initialize + enable pio sm
     pio_sm_init(pio, sm, offset, &c);
-    pio_sm_set_enabled(pio, sm, true);
+    pio_sm_set_enabled(pio, sm, false);
 }
 
 static inline void SPI_Slave_raw_read(

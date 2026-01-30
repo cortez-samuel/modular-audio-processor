@@ -78,7 +78,7 @@ static inline void SPI_Byte_Master_init(
 
         // initialize + enable pio sm
     pio_sm_init(pio, sm, offset, &c);
-    pio_sm_set_enabled(pio, sm, true);
+    pio_sm_set_enabled(pio, sm, false);
 }
 
 static inline void SPI_Byte_Master_w(PIO pio, uint sm, uint CS_pin,
@@ -199,7 +199,7 @@ static inline void SPI_Byte_Slave_init(
 
         // initialize + enable pio sm 
     pio_sm_init(pio, sm, offset, &c);
-    pio_sm_set_enabled(pio, sm, true);
+    pio_sm_set_enabled(pio, sm, false);
 }
 
 static inline size_t SPI_Byte_Slave_r(PIO pio, uint sm, uint CS_pin,
