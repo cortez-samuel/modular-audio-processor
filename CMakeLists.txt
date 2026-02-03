@@ -97,6 +97,7 @@ pico_add_extra_outputs(I2S_Tx_test)
 
 add_executable(I2S_Rx_test
     test/I2S_Rx_test.cpp
+    libraries/I2S.cpp
 )
 pico_generate_pio_header(I2S_Rx_test ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Rx_naive.pio)
 

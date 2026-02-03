@@ -66,3 +66,19 @@ Samuel Cortez :: 1/29/26 5:00pm - 10:00pm
   -- Unsuccessful, there still appears to be a bug in which the transmission from one module to another is heavily delayed.
   -- Additionally, the waveform on the receiving module partially resembles the waveform in the transmitting module, being cut off at times.
   -- Fixed issue related to FFT mode being overly sensitive to noise
+
+Noah McGlothlin :: 1/29/26 4:30pm - 1/30/26 3:00am, 2/1/26 6:00pm - 2/2/26 12:00am
+  -- Got I2S_Tx DMA working
+    -- Likely can write to the I2S_Tx buffer too fast for the PIO to go through, but should not cause major 
+      problems as the old information will be written over. May cause issues if it overwrights data currently 
+      being read at by DMA, have not been able to test but can be avoided with a large enough buffer.
+  -- Got I2S_Rx DMA working
+    -- Makes use of IRQ to deal with the FIFO (queue) nature of it. 
+    -- Had some weird bug where it would sometimes read/store/output (not sure which) a value 6 times instead of 5, 
+       thinking it has to do with queuing it a transmission on the Tx side though, rather than a problem with the 
+       Rx.
+    -- May use IRQ for I2S_Tx instead of control DMA since currently queuing doesn't *actually* queue it in a 
+       normal sense, rather Tx will just output the most recent thing queued that cycle. May also be able to 
+       make use of transmission count controlling, but would end up being unclear about how it works.
+  -- Thinking about using DMA for ADC rather than an IRQ. 
+  
