@@ -25,10 +25,10 @@
 
 
 ; ===== SETUP =====
-wait 1 pin 2    ; wait for rc frame (may be during instruction running)
-wait 0 pin 2    ; wait for lc frame to start (BCLK falling edge here)
-wait 1 pin 1    ; WS changed a cycle before channel data
-
+wait 1 pin 2
+wait 0 pin 2
+wait 0 pin 1
+wait 1 pin 1
 
 ; ===== MAIN =====
 .wrap_target
@@ -61,12 +61,10 @@ static inline void I2S_Rx_naive_init(
     sm_config_set_in_pins(&c, SD_pin);
     sm_config_set_in_pin_count(&c, 3);
 
+    sm_config_set_jmp_pin(&c, WS_pin);
+
         // set isr and SHIFCTRL_PUSH_THRESH
     sm_config_set_in_shift(&c, false, true, WS_frame_size);
-
-        // set clkdiv (sample 2 times per BCLK edge)
-    float clkdiv = clock_get_hz(clk_sys) / (2.0 * fs * cycles_per_edge * WS_frame_size * 2.0);
-    sm_config_set_clkdiv(&c, clkdiv);
 
         // pin mask + pindir + pin initialization
     uint64_t pin_mask = (1 << SD_pin) | (1 << WS_pin) | (1 << BCLK_pin);
@@ -77,6 +75,9 @@ static inline void I2S_Rx_naive_init(
     pio_gpio_init(pio, BCLK_pin);
     pio_gpio_init(pio, WS_pin);
     pio_gpio_init(pio, SD_pin);
+
+        // disable input synch on the SD pins
+    //pio->input_sync_bypass = 1 << SD_pin;
 
         // init + enable pio sm
     pio_sm_init(pio, sm, offset, &c);

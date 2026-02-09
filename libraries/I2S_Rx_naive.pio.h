@@ -12,25 +12,26 @@
 // I2S_Rx_naive //
 // ------------ //
 
-#define I2S_Rx_naive_wrap_target 3
-#define I2S_Rx_naive_wrap 5
+#define I2S_Rx_naive_wrap_target 4
+#define I2S_Rx_naive_wrap 6
 #define I2S_Rx_naive_pio_version 0
 
 static const uint16_t I2S_Rx_naive_program_instructions[] = {
     0x20a2, //  0: wait   1 pin, 2
     0x2022, //  1: wait   0 pin, 2
-    0x20a1, //  2: wait   1 pin, 1
+    0x2021, //  2: wait   0 pin, 1
+    0x20a1, //  3: wait   1 pin, 1
             //     .wrap_target
-    0x2021, //  3: wait   0 pin, 1
-    0x20a1, //  4: wait   1 pin, 1
-    0x4001, //  5: in     pins, 1
+    0x2021, //  4: wait   0 pin, 1
+    0x20a1, //  5: wait   1 pin, 1
+    0x4001, //  6: in     pins, 1
             //     .wrap
 };
 
 #if !PICO_NO_HARDWARE
 static const struct pio_program I2S_Rx_naive_program = {
     .instructions = I2S_Rx_naive_program_instructions,
-    .length = 6,
+    .length = 7,
     .origin = -1,
     .pio_version = I2S_Rx_naive_pio_version,
 #if PICO_PIO_VERSION > 0
@@ -63,9 +64,6 @@ static inline void I2S_Rx_naive_init(
     sm_config_set_in_pin_count(&c, 3);
         // set isr and SHIFCTRL_PUSH_THRESH
     sm_config_set_in_shift(&c, false, true, WS_frame_size);
-        // set clkdiv (sample 2 times per BCLK edge)
-    float clkdiv = clock_get_hz(clk_sys) / (2.0 * fs * cycles_per_edge * WS_frame_size * 2.0);
-    sm_config_set_clkdiv(&c, clkdiv);
         // pin mask + pindir + pin initialization
     uint64_t pin_mask = (1 << SD_pin) | (1 << WS_pin) | (1 << BCLK_pin);
     uint64_t pindir_mask = (0 << SD_pin) | (0 << WS_pin) | (0 << BCLK_pin);
@@ -73,6 +71,8 @@ static inline void I2S_Rx_naive_init(
     pio_gpio_init(pio, BCLK_pin);
     pio_gpio_init(pio, WS_pin);
     pio_gpio_init(pio, SD_pin);
+        // disable input synch on the SD pins
+    //pio->input_sync_bypass = 1 << SD_pin;
         // init + enable pio sm
     pio_sm_init(pio, sm, offset, &c);
     pio_sm_set_enabled(pio, sm, false);
@@ -85,4 +85,5 @@ static inline void I2S_Rx_naive_read(PIO pio, uint sm,
 }
 
 #endif
+
 

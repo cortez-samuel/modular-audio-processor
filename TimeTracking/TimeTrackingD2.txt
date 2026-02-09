@@ -82,3 +82,7 @@ Noah McGlothlin :: 1/29/26 4:30pm - 1/30/26 3:00am, 2/1/26 6:00pm - 2/2/26 12:00
        make use of transmission count controlling, but would end up being unclear about how it works.
   -- Thinking about using DMA for ADC rather than an IRQ. 
   
+
+Noah McGlothlin :: 2/8/26 12:00am - 3:00am 2/8/36 5:00pm - [tbd]
+  -- Working on PingPong DMA thing to speed up I2S_Rx (need to test).
+    -- Finished basic functions + logic (need to go back when not as tired to actually fix it up).

@@ -6,6 +6,8 @@
 #include "hardware/adc.h"
 #include "hardware/irq.h"
 
+#define ADC_GET_CHANNEL_PIN(channel) (channel + 26)
+
 
 void defaultADCRIQHandler();
 
@@ -16,6 +18,7 @@ public:
         irq_handler_t irq_handler);
 
     static ADC& getADCChannel(uint8_t channel);
+    static void enableChannel(uint8_t channel, bool enabled);
 
     static ADC& getActiveChannel();
     static void setActiveChannel(uint8_t channel);
@@ -38,7 +41,10 @@ public:
 
 
 public:
-    ADC(uint8_t channel);
+    ADC(uint8_t channel, bool enabled);
+
+    void enable(bool enabled);
+    bool isEnabled() const;
 
 public:
     bool newValue() const;
@@ -53,6 +59,7 @@ private:
     uint16_t m_value;
     uint8_t m_channel;
     bool m_newValue;
+    bool m_enabled;
 };
 
 #endif // ADC_HPP

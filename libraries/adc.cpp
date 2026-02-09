@@ -4,8 +4,16 @@
 
 
 // OBJECT STUFF
-ADC::ADC(uint8_t channel): m_value(0), m_channel(channel), m_newValue(false) {
-    adc_gpio_init(channel + 26);
+ADC::ADC(uint8_t channel, bool enabled): m_value(0), m_channel(channel), m_newValue(false), m_enabled(enabled) {
+    this->enable(enabled);
+}
+
+void ADC::enable(bool enabled) {
+    if (enabled) adc_gpio_init(m_channel + 26);
+    else if (m_enabled) gpio_deinit(m_channel + 26);
+}
+bool ADC::isEnabled() const {
+    return m_enabled;
 }
 
 bool ADC::newValue() const {
@@ -35,10 +43,10 @@ uint8_t ADC::getChannel() const {
 static uint8_t activeChannel;
 static uint8_t runningChannel;
 static ADC adcChannels[4] = {
-    ADC(0),
-    ADC(1),
-    ADC(2),
-    ADC(3),
+    ADC(0, false),
+    ADC(1, false),
+    ADC(2, false),
+    ADC(3, false),
 };
 // OVERALL ADC STUFF
 void ADC::init(float sample_freq, 
@@ -46,10 +54,10 @@ void ADC::init(float sample_freq,
         irq_handler_t irq_handler) {
     // sample_freq >= 750
 
-    adcChannels[0] = ADC(0);
-    adcChannels[1] = ADC(1);
-    adcChannels[2] = ADC(2);
-    adcChannels[3] = ADC(3); 
+    adcChannels[0] = ADC(0, false);
+    adcChannels[1] = ADC(1, false);
+    adcChannels[2] = ADC(2, false);
+    adcChannels[3] = ADC(3, false); 
 
     
     adc_init();
@@ -61,6 +69,10 @@ void ADC::init(float sample_freq,
 
 ADC& ADC::getADCChannel(uint8_t channel) {
     return adcChannels[channel];
+}
+
+void ADC::enableChannel(uint8_t channel, bool enabled) {
+    adcChannels[channel].enable(enabled);
 }
 
 ADC& ADC::getActiveChannel() {
