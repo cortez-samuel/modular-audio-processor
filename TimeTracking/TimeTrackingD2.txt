@@ -83,6 +83,13 @@ Noah McGlothlin :: 1/29/26 4:30pm - 1/30/26 3:00am, 2/1/26 6:00pm - 2/2/26 12:00
   -- Thinking about using DMA for ADC rather than an IRQ. 
   
 
-Noah McGlothlin :: 2/8/26 12:00am - 3:00am 2/8/36 5:00pm - [tbd]
+Noah McGlothlin :: 2/8/26 12:00am - 3:00am 2/8/36 5:00pm - 2/9/26 4:00am 2/11/26 6:00pm - 6:50pm 
   -- Working on PingPong DMA thing to speed up I2S_Rx (need to test).
     -- Finished basic functions + logic (need to go back when not as tired to actually fix it up).
+  -- Got pingpong buffer working. Moed it into its own class, still need to be put in use with I2S_Rx class 
+     but can read samples up to 100kHz (most currently tested), with the only common errors occuring when 
+     oversampling, leading the buffers being overwritten. Can be solved by having large enough buffers. 
+    -- A rare error occurs where the samples are repeated, still looking into why it happens, but still 
+       trying to reproduce it consistently.
+  -- Can change to have variable width (num buffers), but either requires chaning the current logic or 
+     just making it a template. 

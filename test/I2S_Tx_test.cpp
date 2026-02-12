@@ -14,15 +14,15 @@ int main() {
     stdio_init_all();
     
     I2S_Tx i2sTx;
-    i2sTx.init(2, 3, 0, 50000, 12);
+    i2sTx.init(2, 3, 0, 100000, 12);
     i2sTx.enable(true);
 
     bool pin13 = 1;
     while (1) {
         //i2sTx.queue(0x111, 0x333);
         i2sTx.queue(0xAAA, 0xFF0);
-        sleep_us(500);
+        sleep_us(10);
         i2sTx.queue(0x111, 0x333);
-        sleep_us(500);
+        sleep_us(20);
     }
 }

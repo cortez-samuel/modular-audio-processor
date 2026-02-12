@@ -6,6 +6,8 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+option(_PROD OFF)
+
 # Initialise pico_sdk from installed location
 # (note this can come from environment, CMake cache etc)
 
@@ -32,7 +34,7 @@ include(pico_sdk_import.cmake)
 
 
     # name project the name of executable being run/tested
-project(I2S_Tx_test C CXX ASM)
+project(I2S_Rx_test C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -98,6 +100,7 @@ pico_add_extra_outputs(I2S_Tx_test)
 add_executable(I2S_Rx_test
     test/I2S_Rx_test.cpp
     libraries/I2S.cpp
+    libraries/RxPingPong.cpp
 )
 pico_generate_pio_header(I2S_Rx_test ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Rx_naive.pio)
 
@@ -108,6 +111,7 @@ target_link_libraries(I2S_Rx_test
     pico_stdlib
     hardware_pio
     hardware_dma
+    hardware_irq
 )
 target_include_directories(I2S_Rx_test PRIVATE 
     ${CMAKE_CURRENT_LIST_DIR}
@@ -134,9 +138,10 @@ target_include_directories(SPI_master_pio_test PRIVATE
 pico_add_extra_outputs(SPI_master_pio_test)
 
 
+if (_PROD)
 ########## MAIN MASTER ##########
 add_executable(main_master     
-    test/main_master.cpp
+    src/main_master.cpp
     libraries/oled.cpp
 )
 pico_generate_pio_header(main_master ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_naive.pio)
@@ -158,3 +163,85 @@ target_include_directories(main_master PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(main_master)
+
+
+########## MAIN .CPP FILES ##########
+
+### AUDIO INPUT MODULE ###
+add_executable(module_INPUT     
+    src/module_INPUT.cpp
+    libraries/I2S.cpp
+    libraries/adc.cpp 
+)
+pico_generate_pio_header(module_INPUT ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_naive.pio)
+pico_generate_pio_header(module_INPUT ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_compact.pio)
+pico_generate_pio_header(module_INPUT ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Rx_naive.pio)
+
+pico_enable_stdio_uart(module_INPUT 0)
+pico_enable_stdio_usb(module_INPUT 1)
+
+target_link_libraries(module_INPUT
+    pico_stdlib
+    hardware_pio
+    hardware_adc
+    hardware_dma
+    hardware_irq
+)
+target_include_directories(module_INPUT PRIVATE 
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+pico_add_extra_outputs(module_INPUT)
+
+### AUDIO DSP MODULE ###
+add_executable(module_FUNCTION     
+    src/module_FUNCTION.cpp
+    libraries/I2S.cpp
+    libraries/adc.cpp 
+    libraries/oled.cpp
+)
+pico_generate_pio_header(module_FUNCTION ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_naive.pio)
+pico_generate_pio_header(module_FUNCTION ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_compact.pio)
+pico_generate_pio_header(module_FUNCTION ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Rx_naive.pio)
+
+pico_enable_stdio_uart(module_FUNCTION 0)
+pico_enable_stdio_usb(module_FUNCTION 1)
+
+target_link_libraries(module_FUNCTION
+    pico_stdlib
+    hardware_pio
+    hardware_adc
+    hardware_dma
+    hardware_irq
+    hardware_spi
+)
+target_include_directories(module_FUNCTION PRIVATE 
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+pico_add_extra_outputs(module_FUNCTION)
+
+### AUDIO OUTPUT MODULE ###
+add_executable(module_OUTPUT     
+    src/module_OUTPUT.cpp
+    libraries/I2S.cpp
+    libraries/adc.cpp 
+)
+pico_generate_pio_header(module_OUTPUT ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_naive.pio)
+pico_generate_pio_header(module_OUTPUT ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_compact.pio)
+pico_generate_pio_header(module_OUTPUT ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Rx_naive.pio)
+
+pico_enable_stdio_uart(module_OUTPUT 0)
+pico_enable_stdio_usb(module_OUTPUT 1)
+
+target_link_libraries(module_OUTPUT
+    pico_stdlib
+    hardware_pio
+    hardware_adc
+    hardware_dma
+    hardware_irq
+)
+target_include_directories(module_OUTPUT PRIVATE 
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+pico_add_extra_outputs(module_OUTPUT)
+
+endif()
