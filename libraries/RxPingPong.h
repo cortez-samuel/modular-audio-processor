@@ -34,7 +34,11 @@ private:
     uint _offset;
 
 public:
+    RxPingPong();
     RxPingPong(uint32_t* reserved, uint32_t depth);
+
+public:
+    void setReservedSpace(uint32_t* reserved, uint32_t depth);
 
 public:
     void begin(PIO pio, uint sm);
@@ -42,6 +46,14 @@ public:
 public:
     bool readBuffer(uint32_t* buff);
     bool read(uint32_t* out);
+
+public:
+    inline bool overflow() const {
+        return _overflow;
+    }
+    inline void clearOverflow() {
+        _overflow = false;
+    }
     
 private:
     void __time_critical_func(_appendBuffer)(Buffer_t** FIFO, Buffer_t* element) {

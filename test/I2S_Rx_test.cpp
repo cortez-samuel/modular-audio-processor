@@ -13,8 +13,6 @@
 #include <cstdio>
 
 
-I2S_Rx i2sRx;
-
 uint pin13 = 13;
 /*
 struct PPB {
@@ -187,9 +185,13 @@ int main() {
     gpio_init(pin13);
     gpio_set_dir(pin13, GPIO_OUT);
 
+    uint8_t depth = 64;
+    uint32_t reserved[RxPingPong::WIDTH * 64];
+    I2S_Rx i2sRx(reserved, depth);
+
     //set_sys_clock_48mhz();    
 
-    ///*
+    /*
     PIO pio;
     uint sm;
     uint offset;
@@ -203,7 +205,7 @@ int main() {
     uint32_t ppb_aligned = alignof(RxPingPong);
 
     //pingpong.begin(pio, sm);
-    //*/
+    */
     /*
     ch1 = dma_claim_unused_channel(true);
     ch2 = dma_claim_unused_channel(true);
@@ -243,11 +245,10 @@ int main() {
         irq_set_enabled(DMA_IRQ_NUM(0), true);
     */
 
-    //i2sRx.init(2, 3, 1, 50000, 12);
+    i2sRx.init(8, 9, 7, 50000, 16);
 
     sleep_ms(5000);
     stdio_printf("START\n");
-    stdio_printf("%u\n", ppb_aligned);
     stdio_printf("%u\n", clock_get_hz(clk_sys));
 
     /*  
@@ -255,9 +256,9 @@ int main() {
     pio_sm_set_enabled(pio, sm, true);
     */
 
-    pio_sm_set_enabled(pio, sm, true);
+    //pio_sm_set_enabled(pio, sm, true);
 
-    //i2sRx.enable(true);
+    i2sRx.enable(true);
 
 
     //uint32_t buff[PPB::DEPTH];
@@ -270,7 +271,7 @@ int main() {
         //bool valid = ppb.read(buff);
         //I2S_Rx_naive_read(i2sRx.pio, i2sRx.sm, &LC, &RC);
         //bool valid = true;
-        bool valid = ppb.read(&LC); ppb.read(&RC);
+        bool valid = i2sRx.read(LC, RC);
 
         if (valid) {
             printf("0x%02x 0x%02x\n", LC, RC);

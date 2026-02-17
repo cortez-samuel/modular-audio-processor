@@ -1,5 +1,18 @@
 #include "RxPingPong.h"
 
+RxPingPong::RxPingPong() {
+    _reservedMem = nullptr;
+    _bufferDepth = 0;
+
+    _running        = false;
+    _overflow       = false;
+    _offset         = 0;
+
+    _empty          = nullptr;
+    _active         = nullptr;
+    _queued         = nullptr;
+    _filled         = nullptr;
+}
 RxPingPong::RxPingPong(uint32_t* reserved, uint32_t depth) {
     _reservedMem    = reserved;
     _bufferDepth    = depth;
@@ -7,6 +20,23 @@ RxPingPong::RxPingPong(uint32_t* reserved, uint32_t depth) {
     _running        = false;
     _overflow       = false;
     _offset         = 0;
+
+    _empty          = nullptr;
+    _active         = nullptr;
+    _queued         = nullptr;
+    _filled         = nullptr;
+
+    for (int i = 0; i < WIDTH; i++) {
+        _buffers[i].data = &_reservedMem[_bufferDepth * i];
+        _appendBuffer(&_empty, &_buffers[i]); 
+    }
+    _active = _popBuffer(&_empty);
+    _queued = _popBuffer(&_empty);
+}
+
+void RxPingPong::setReservedSpace(uint32_t* reserved, uint32_t depth) {
+    _reservedMem = reserved;
+    _bufferDepth = depth;
 
     _empty          = nullptr;
     _active         = nullptr;

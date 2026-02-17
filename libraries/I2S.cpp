@@ -40,11 +40,28 @@ const uint32_t* I2S_Tx::getData(uint32_t i) const {
 }
 
 
-
-I2S_Rx::I2S_Rx() {
+I2S_Rx::I2S_Rx() :
+        rxPingPong() {
     pio_claim_free_sm_and_add_program(&I2S_Rx_naive_program, &pio, &sm, &offset);
 }
-I2S_Rx::I2S_Rx(irq_handler_t irqHandler, uint irqn) {
-
+I2S_Rx::I2S_Rx(uint32_t* reserved, uint8_t depth) : 
+        rxPingPong(reserved, depth) {
     pio_claim_free_sm_and_add_program(&I2S_Rx_naive_program, &pio, &sm, &offset);
+}
+
+void I2S_Rx::setReservedMem(uint32_t* reservedMem, uint8_t depth) {
+    rxPingPong.setReservedSpace(reservedMem, depth);
+}
+
+bool I2S_Rx::init(uint BCLK_pin, uint WS_pin, uint SD_pin, float fs, uint WS_frame_size) {
+    I2S_Rx_naive_init(pio, sm, offset, BCLK_pin, WS_pin, SD_pin, fs, WS_frame_size);
+
+    return true;
+}
+
+void I2S_Rx::enable(bool start) {
+    if (start) {
+        rxPingPong.begin(pio, sm);
+        pio_sm_set_enabled(pio, sm, true);
+    }
 }

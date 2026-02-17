@@ -5,6 +5,8 @@
 #include "hardware/pio.h"
 #include "hardware/dma.h"
 
+#include "RxPingPong.h"
+
 #include "I2S_Tx_naive.pio.h"
 #include "I2S_Tx_compact.pio.h"
 
@@ -88,35 +90,40 @@ public:
 
 
 class I2S_Rx {
-
 public:
+    static const uint8_t BUFFER_WIDTH = RxPingPong::WIDTH;
+
+private:
+    RxPingPong rxPingPong;
+
     PIO pio;
     uint sm;
     uint offset;
 
 public:
     I2S_Rx();
-    I2S_Rx(irq_handler_t irqHandler, uint irqn);
+    I2S_Rx(uint32_t* reserved, uint8_t depth);
 
-    bool init(uint BCLK_pin, uint WS_pin, uint SD_pin, float fs, uint WS_frame_size) {
-        I2S_Rx_naive_init(pio, sm, offset, BCLK_pin, WS_pin, SD_pin, fs, WS_frame_size);
-        stdio_printf("init called in I2S_Rx\n");
+public:
+    void setReservedMem(uint32_t* reservedMem, uint8_t depth);
+    bool init(uint BCLK_pin, uint WS_pin, uint SD_pin, float fs, uint WS_frame_size);
+    void enable(bool start);
 
-        return true;
-    }
-
-    void enable(bool start) {
-        if (start) {
-            pio_sm_set_enabled(pio, sm, true);
-        }
-    }
-
+public:
     inline bool read(uint32_t& LC, uint32_t& RC) {
-        return true;
+        bool valid = rxPingPong.read(&LC); rxPingPong.read(&RC);
+        return valid;
+    }
+    inline bool readBuffer(uint32_t* out) {
+        return rxPingPong.readBuffer(out);
     }
 
+public:
     inline bool getOverflow() const {
-        return true;
+        return rxPingPong.overflow();
+    }
+    inline void clearOverflow() {
+        rxPingPong.clearOverflow();
     }
 };
 

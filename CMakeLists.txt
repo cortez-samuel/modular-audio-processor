@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-option(_PROD OFF)
+option(_PROD ON)
 
 # Initialise pico_sdk from installed location
 # (note this can come from environment, CMake cache etc)
@@ -34,7 +34,7 @@ include(pico_sdk_import.cmake)
 
 
     # name project the name of executable being run/tested
-project(I2S_Rx_test C CXX ASM)
+project(module_FUNCTION C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -138,7 +138,6 @@ target_include_directories(SPI_master_pio_test PRIVATE
 pico_add_extra_outputs(SPI_master_pio_test)
 
 
-if (_PROD)
 ########## MAIN MASTER ##########
 add_executable(main_master     
     src/main_master.cpp
@@ -171,6 +170,7 @@ pico_add_extra_outputs(main_master)
 add_executable(module_INPUT     
     src/module_INPUT.cpp
     libraries/I2S.cpp
+    libraries/RxPingPong.cpp
     libraries/adc.cpp 
 )
 pico_generate_pio_header(module_INPUT ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_naive.pio)
@@ -196,6 +196,7 @@ pico_add_extra_outputs(module_INPUT)
 add_executable(module_FUNCTION     
     src/module_FUNCTION.cpp
     libraries/I2S.cpp
+    libraries/RxPingPong.cpp
     libraries/adc.cpp 
     libraries/oled.cpp
 )
@@ -208,6 +209,8 @@ pico_enable_stdio_usb(module_FUNCTION 1)
 
 target_link_libraries(module_FUNCTION
     pico_stdlib
+    pico_multicore
+    pico_util
     hardware_pio
     hardware_adc
     hardware_dma
@@ -223,6 +226,7 @@ pico_add_extra_outputs(module_FUNCTION)
 add_executable(module_OUTPUT     
     src/module_OUTPUT.cpp
     libraries/I2S.cpp
+    libraries/RxPingPong.cpp
     libraries/adc.cpp 
 )
 pico_generate_pio_header(module_OUTPUT ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_naive.pio)
@@ -243,5 +247,3 @@ target_include_directories(module_OUTPUT PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(module_OUTPUT)
-
-endif()
