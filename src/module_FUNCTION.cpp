@@ -98,7 +98,7 @@ void core1_entry() {
 
     // Startup splash screen
     oled.clearDisplay();
-    oled.setCursor(10, 28);
+    oled.setCursor(10, 5);
     oled.setTextSize(2);
     oled.setTextColor(true);
     oled.print("Modular \n Audio \n Processor");
@@ -107,7 +107,7 @@ void core1_entry() {
 
     // Circular buffer for samples
     static const int CIRCULAR_BUFFER_SIZE = 512; // Larger buffer for better history
-    uint32_t circularBuffer[CIRCULAR_BUFFER_SIZE];
+    uint32_t circularBuffer[CIRCULAR_BUFFER_SIZE] = {0};
     int bufferWriteIndex = 0;
     
     // For display timing
@@ -126,17 +126,14 @@ void core1_entry() {
         uint32_t now = time_us_32() / 1000; // Convert to ms
         if (now - lastDisplayTime >= DISPLAY_INTERVAL_MS) {
             lastDisplayTime = now;
-            
             oled.clearDisplay();
-            
-            // Draw horizontal line at center (optional)
-            for (int x = 0; x < 128; x++) {
-                oled.drawPixel(x, 32, true); // Center line
+        for (int x = 0; x < 128; x++) {
+            if (x % 4 < 2) {
+                oled.drawPixel(x, 32, true); 
             }
-            
+        }
             // Draw the waveform
             int lastY = 32; // Start at center
-            
             for (int x = 0; x < 128; x++) {
                 // Map screen x coordinate to buffer index
                 // This ensures we use the entire circular buffer across the screen width
@@ -239,30 +236,26 @@ int main() {
     const uint32_t SAMPLES_PER_PIXEL = 12; // Approx (44100/30)/128
     bool displayQueueFull = false;
     bool displayQueueEmpty = true;
-    while(1) {
-            // get alpha from ADC
-        if (adc0.newValue()) alpha = clamp(alphaMin, adc0.trueValue() / 3.3f, alphaMax);
-        if (alpha == alphaMin) alpha = 0.0f;
+ while(1) {
+    if (adc0.newValue()) alpha = clamp(alphaMin, adc0.trueValue() / 3.3f, alphaMax);
+    if (alpha == alphaMin) alpha = 0.0f;
 
-            // get I2S_Rx data
-        bool valid = i2sRx.read(LC, RC);
-            // filter I2S_Rx data
-        filterOutput = currentFilter(uint2float(LC));
-        uint32_t output = float2uint(filterOutput);
-            // send output to I2S_Tx
-        i2sTx.queue(output, RC);
+    uint32_t rxBuf[reservedMemDepth];
+    if (i2sRx.readBuffer(rxBuf)) {
+for (int i = 0; i < reservedMemDepth; i++) {
+    filterOutput = currentFilter(uint2float(rxBuf[i]));  // no >> 16
+    uint32_t output = float2uint(filterOutput);          // no << 16
+    i2sTx.queue(output, output);
+    
     downsampleCounter++;
     if (downsampleCounter >= DOWNSAMPLE_FACTOR) {
-        // Instead of just one sample, send multiple samples to fill the circular buffer
-        for (unsigned int i = 0; i < SAMPLES_PER_PIXEL; i++) {
-            // Use the current output or store multiple samples
-            queue_try_add(&sharedQueue, &output);
-        }
+        queue_try_add(&sharedQueue, &output);
         downsampleCounter = 0;
     }
-    }
-    
 }
+    }
+}
+    }
 
 
 /////////////////////////////////////

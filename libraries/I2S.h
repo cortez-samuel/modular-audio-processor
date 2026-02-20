@@ -4,12 +4,9 @@
 #include "pico/stdlib.h"
 #include "hardware/pio.h"
 #include "hardware/dma.h"
-
 #include "RxPingPong.h"
-
 #include "I2S_Tx_naive.pio.h"
 #include "I2S_Tx_compact.pio.h"
-
 #include "I2S_Rx_naive.pio.h"
 
 #define I2S_TX_PROGRAM__NAIVE       0

@@ -3,24 +3,21 @@
 RxPingPong::RxPingPong() {
     _reservedMem = nullptr;
     _bufferDepth = 0;
-
     _running        = false;
     _overflow       = false;
     _offset         = 0;
-
     _empty          = nullptr;
     _active         = nullptr;
     _queued         = nullptr;
     _filled         = nullptr;
 }
+
 RxPingPong::RxPingPong(uint32_t* reserved, uint32_t depth) {
     _reservedMem    = reserved;
     _bufferDepth    = depth;
-
     _running        = false;
     _overflow       = false;
     _offset         = 0;
-
     _empty          = nullptr;
     _active         = nullptr;
     _queued         = nullptr;
@@ -37,12 +34,10 @@ RxPingPong::RxPingPong(uint32_t* reserved, uint32_t depth) {
 void RxPingPong::setReservedSpace(uint32_t* reserved, uint32_t depth) {
     _reservedMem = reserved;
     _bufferDepth = depth;
-
     _empty          = nullptr;
     _active         = nullptr;
     _queued         = nullptr;
     _filled         = nullptr;
-
     for (int i = 0; i < WIDTH; i++) {
         _buffers[i].data = &_reservedMem[_bufferDepth * i];
         _appendBuffer(&_empty, &_buffers[i]); 
@@ -111,13 +106,11 @@ bool RxPingPong::readBuffer(uint32_t* buff) {
 }
 bool RxPingPong::read(uint32_t* out) {
     if (_filled == nullptr) return false;
-
-    uint32_t ret = _filled->data[_offset++];
-    if (_offset == _bufferDepth) {
+    *out = _filled->data[_offset++];
+    if (_offset >= _bufferDepth) {
         _offset = 0;
-        _appendBuffer(&_empty, _popBuffer(&_filled));
+        Buffer_t* done = _popBuffer(&_filled);
+        _appendBuffer(&_empty, done);
     }
-    *out = ret;
     return true;
 }
-

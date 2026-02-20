@@ -57,15 +57,15 @@ public:
     
 private:
     void __time_critical_func(_appendBuffer)(Buffer_t** FIFO, Buffer_t* element) {
+        uint32_t intStatus = save_and_disable_interrupts();
+        element->next = nullptr;
         if (*FIFO == nullptr) {
             *FIFO = element;
-            element->next = nullptr;
-            return;
+        } else {
+            Buffer_t** tail = FIFO;
+            while ((*tail)->next != nullptr) { tail = &((*tail)->next); }
+            (*tail)->next = element;
         }
-        uint32_t intStatus = save_and_disable_interrupts();
-        while ((*FIFO)->next != nullptr) { FIFO = &((*FIFO)->next); }
-        (*FIFO)->next = element;
-        element->next = nullptr;
         restore_interrupts(intStatus);
     }
     Buffer_t* __time_critical_func(_popBuffer)(Buffer_t** FIFO) {
@@ -87,10 +87,15 @@ private:
             _appendBuffer(&_filled, _active);
             _active = _queued;
             _queued = _popBuffer(&_empty);
+        } else {
+            // Overflow: no empty buffers available.
+            // Recycle _active in place — discard its contents and reuse it
+            // so the DMA always has a valid write destination.
+            _overflow = true;
         }
-        else { _overflow = false; }
 
-        dma_irqn_acknowledge_channel(0, ch); 
+        dma_irqn_acknowledge_channel(0, ch);
+        // Always point DMA at _queued, which is valid in both branches above
         dma_channel_set_write_addr(ch, _queued->data, false);
     }
     static void __time_critical_func(_clsIRQ)() {
