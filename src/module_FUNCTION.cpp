@@ -184,25 +184,12 @@ void core1_entry() {
 
     // CORE 0 (IO / FILTER) MAIN
 int main() {
-        // init stdio io
     stdio_init_all();
-
-        // init debug LED
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
-    //gpio_put(LED_PIN, LED_PIN_VALUE);
-
-        // init shared queue
     queue_init(&sharedQueue, sizeof(uint32_t), 256);
-
-
-        // launch core 1
     multicore_launch_core1(core1_entry);
-
-
-        // Initialize I2S_Tx and I2S_Rx
     i2sTx.init(PIN_I2S_Tx_BCLK, PIN_I2S_Tx_WS, PIN_I2S_Tx_SD, fs, I2S_WS_FRAME_WIDTH);
-
     i2sRx.setReservedMem(reservedMem, reservedMemDepth);
     i2sRx.init(PIN_I2S_Rx_BCLK, PIN_I2S_Rx_WS, PIN_I2S_Rx_SD, fs, I2S_WS_FRAME_WIDTH);
 
@@ -242,11 +229,10 @@ int main() {
 
     uint32_t rxBuf[reservedMemDepth];
     if (i2sRx.readBuffer(rxBuf)) {
-for (int i = 0; i < reservedMemDepth; i++) {
-    filterOutput = currentFilter(uint2float(rxBuf[i]));  // no >> 16
-    uint32_t output = float2uint(filterOutput);          // no << 16
-    i2sTx.queue(output, output);
-    
+    for (int i = 0; i < reservedMemDepth; i++) {
+        filterOutput = currentFilter(uint2float(rxBuf[i]));
+        uint32_t output = float2uint(filterOutput);
+        i2sTx.queue(output, output);
     downsampleCounter++;
     if (downsampleCounter >= DOWNSAMPLE_FACTOR) {
         queue_try_add(&sharedQueue, &output);
