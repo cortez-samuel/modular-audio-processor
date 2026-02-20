@@ -5,7 +5,6 @@
 #include "pico/float.h"
 #include "pico/multicore.h"
 #include "pico/util/queue.h"
-
 #include "../libraries/I2S.h"
 #include "../libraries/oled.h"
 #include "../libraries/adc.hpp"
@@ -23,11 +22,9 @@ static const uint8_t PIN_DC             = 29;
 static const uint8_t PIN_CS             = 24;
 
     // SHARED STUFF
-static volatile uint8_t DOWNSAMPLE_FACTOR   = 1;
-
+static volatile uint8_t DOWNSAMPLE_FACTOR   = 16;
 static const uint8_t SHARED_BUFFER_WIDTH    = 64;
 static const uint8_t SHARED_BUFFER_DEPTH    = 128;
-
 static queue_t sharedQueue;
 
     // I2S TX
@@ -81,14 +78,14 @@ static inline float clamp(float min, float x, float max) {
 
 
     // CORE 1 (OLED DISPLAY) MAIN
+// CORE 1 (OLED DISPLAY) MAIN
 void core1_entry() {
-        // INITIALIZE OLED SCREEN
+    // INITIALIZE OLED SCREEN
     gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
     gpio_set_function(PIN_TX, GPIO_FUNC_SPI);
     OLED oled(SPI_INSTANCE, PIN_CS, PIN_DC, PIN_RST, 128, 64);
 
     sleep_ms(500);
-    printf("Starting up...");
     if (!oled.begin(10 * 1000 * 1000)) {
         // OLED Initialization failed, LED on feather will blink
         while (true) {
@@ -96,36 +93,95 @@ void core1_entry() {
             sleep_ms(500);
             gpio_put(LED_PIN, 0);
             sleep_ms(500);
-            printf("failed\n");
         }
     }
 
-        // Startup splash screen
+    // Startup splash screen
     oled.clearDisplay();
     oled.setCursor(10, 28);
     oled.setTextSize(2);
     oled.setTextColor(true);
-    oled.print("\\_(^v^)_/");
+    oled.print("Modular \n Audio \n Processor");
     oled.display();
     sleep_ms(2000);
 
-    uint32_t displayBuffer[128];
+    // Circular buffer for samples
+    static const int CIRCULAR_BUFFER_SIZE = 512; // Larger buffer for better history
+    uint32_t circularBuffer[CIRCULAR_BUFFER_SIZE];
+    int bufferWriteIndex = 0;
+    
+    // For display timing
+    uint32_t lastDisplayTime = 0;
+    const uint32_t DISPLAY_INTERVAL_MS = 33; // ~30fps
+    
     while(1) {
-            // draw to display
-        oled.clearDisplay();
-        for (int x = 0; x < 127; x++) {
-            displayBuffer[x] = displayBuffer[x+1];
-            uint8_t y = displayBuffer[x] >> (I2S_WS_FRAME_WIDTH - 6);
-            oled.drawPixel(x, y, true);
+        // Read all available samples from queue (non-blocking)
+        uint32_t sample;
+        while (queue_try_remove(&sharedQueue, &sample)) {
+            circularBuffer[bufferWriteIndex] = sample;
+            bufferWriteIndex = (bufferWriteIndex + 1) % CIRCULAR_BUFFER_SIZE;
         }
-        queue_remove_blocking(&sharedQueue, &displayBuffer[127]);
-        uint8_t y = displayBuffer[127] >> (I2S_WS_FRAME_WIDTH - 6);
-        oled.drawPixel(127, y, true);
-        oled.display();
-
-
-        gpio_put(LED_PIN, LED_PIN_VALUE);
-        LED_PIN_VALUE = 1 - LED_PIN_VALUE;
+        
+        // Update display at fixed interval
+        uint32_t now = time_us_32() / 1000; // Convert to ms
+        if (now - lastDisplayTime >= DISPLAY_INTERVAL_MS) {
+            lastDisplayTime = now;
+            
+            oled.clearDisplay();
+            
+            // Draw horizontal line at center (optional)
+            for (int x = 0; x < 128; x++) {
+                oled.drawPixel(x, 32, true); // Center line
+            }
+            
+            // Draw the waveform
+            int lastY = 32; // Start at center
+            
+            for (int x = 0; x < 128; x++) {
+                // Map screen x coordinate to buffer index
+                // This ensures we use the entire circular buffer across the screen width
+                int bufferIndex = (bufferWriteIndex - CIRCULAR_BUFFER_SIZE + 
+                                  (x * CIRCULAR_BUFFER_SIZE) / 128 + CIRCULAR_BUFFER_SIZE) % CIRCULAR_BUFFER_SIZE;
+                
+                // Get sample and scale to screen height (64 pixels)
+                // Shift right by (I2S_WS_FRAME_WIDTH - 6) to map 16-bit to 0-63 range
+                uint8_t y = circularBuffer[bufferIndex] >> (I2S_WS_FRAME_WIDTH - 6);
+                
+                // Invert Y if needed (0 at top, 63 at bottom)
+                y = 63 - y;
+                
+                // Constrain to screen bounds
+                if (y > 63) y = 63;
+                
+                // Draw line from last point to current point (interpolation)
+                if (x > 0) {
+                    int diff = y - lastY;
+                    if (abs(diff) > 1) {
+                        // Draw vertical line to connect points
+                        int startY = lastY;
+                        int endY = y;
+                        if (diff > 0) {
+                            for (int dy = startY; dy <= endY; dy++) {
+                                oled.drawPixel(x, dy, true);
+                            }
+                        } else {
+                            for (int dy = startY; dy >= endY; dy--) {
+                                oled.drawPixel(x, dy, true);
+                            }
+                        }
+                    }
+                }
+                
+                // Draw the main point
+                oled.drawPixel(x, y, true);
+                lastY = y;
+            }
+            
+            oled.display();
+        }
+        
+        // Small delay to prevent tight loop
+        sleep_us(100);
     }
 }
 
@@ -140,7 +196,7 @@ int main() {
     //gpio_put(LED_PIN, LED_PIN_VALUE);
 
         // init shared queue
-    queue_init(&sharedQueue, sizeof(uint32_t), SHARED_BUFFER_DEPTH * SHARED_BUFFER_WIDTH);
+    queue_init(&sharedQueue, sizeof(uint32_t), 256);
 
 
         // launch core 1
@@ -179,7 +235,8 @@ int main() {
         // main loop
     uint32_t LC = 0, RC = 0;
 
-    uint8_t downsampleCounter = 0;
+    uint32_t downsampleCounter = 0;
+    const uint32_t SAMPLES_PER_PIXEL = 12; // Approx (44100/30)/128
     bool displayQueueFull = false;
     bool displayQueueEmpty = true;
     while(1) {
@@ -194,13 +251,15 @@ int main() {
         uint32_t output = float2uint(filterOutput);
             // send output to I2S_Tx
         i2sTx.queue(output, RC);
-
-            // send output to buffer ot be displayed
-        downsampleCounter++;
-        if (downsampleCounter == DOWNSAMPLE_FACTOR) {
+    downsampleCounter++;
+    if (downsampleCounter >= DOWNSAMPLE_FACTOR) {
+        // Instead of just one sample, send multiple samples to fill the circular buffer
+        for (unsigned int i = 0; i < SAMPLES_PER_PIXEL; i++) {
+            // Use the current output or store multiple samples
             queue_try_add(&sharedQueue, &output);
-            downsampleCounter = 0;
         }
+        downsampleCounter = 0;
+    }
     }
     
 }
@@ -216,7 +275,6 @@ float LowPass(float x) {
         // y[n] = alpha x[n] + (1 - alpha) y[n-1]
     static float y = 0;
     y = alpha * x + (1 - alpha) * y;
-    printf("\ty_n = %f -- alpha = %f\n", y, alpha);
     return y;
 }
 
