@@ -48,6 +48,7 @@ static const float fs                   = 44100;
     // ADC / USER INPUT
 static const uint8_t ADC_CHANNEL        = 0;
 static const uint8_t PIN_ADC_CHANNEL    = ADC_GET_CHANNEL_PIN(ADC_CHANNEL);
+static const uint8_t CHANGE_MODE        = 12;
 
     // FILTERS
 static float alpha                      = 0.0f;
@@ -55,7 +56,6 @@ static float alphaMin                   = 0.033f;
 static float alphaMax                   = 1.0f;
 static float (*currentFilter)(float)    = nullptr;
 static float filterOutput               = 0;
-
 static float Pass(float x);
 static float LowPass(float x);
 static float HighPass(float x);
@@ -84,7 +84,6 @@ void core1_entry() {
     gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
     gpio_set_function(PIN_TX, GPIO_FUNC_SPI);
     OLED oled(SPI_INSTANCE, PIN_CS, PIN_DC, PIN_RST, 128, 64);
-
     sleep_ms(500);
     if (!oled.begin(10 * 1000 * 1000)) {
         // OLED Initialization failed, LED on feather will blink
@@ -173,7 +172,15 @@ void core1_entry() {
                 oled.drawPixel(x, y, true);
                 lastY = y;
             }
-            
+                        // Draw mode indicator at bottom left
+            oled.setTextSize(1); // 1 = 6x8 pixels per character
+            oled.setTextColor(true);
+            oled.setCursor(0, 56); // Bottom left (display is 64px tall, text is 8px)
+            switch (mode) {
+                case Mode::Pass:      oled.print("ORG"); break;
+                case Mode::Lowpass:   oled.print("LPF"); break;
+                case Mode::Highpass:  oled.print("HPF"); break;
+            }
             oled.display();
         }
         
@@ -187,17 +194,16 @@ int main() {
     stdio_init_all();
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
+    gpio_init(CHANGE_MODE);
+    gpio_set_dir(CHANGE_MODE, GPIO_IN);
+    gpio_pull_down(CHANGE_MODE);
     queue_init(&sharedQueue, sizeof(uint32_t), 256);
     multicore_launch_core1(core1_entry);
     i2sTx.init(PIN_I2S_Tx_BCLK, PIN_I2S_Tx_WS, PIN_I2S_Tx_SD, fs, I2S_WS_FRAME_WIDTH);
     i2sRx.setReservedMem(reservedMem, reservedMemDepth);
     i2sRx.init(PIN_I2S_Rx_BCLK, PIN_I2S_Rx_WS, PIN_I2S_Rx_SD, fs, I2S_WS_FRAME_WIDTH);
-
-        // run I2S_Tx and I2S_Rx
     i2sTx.enable(true);
     i2sRx.enable(true);
-
-        // Initialize ADC
     ADC::init(10, true, false, 1, defaultADCRIQHandler);
     ADC::enableChannel(ADC_CHANNEL, true);
     ADC::setActiveChannel(ADC_CHANNEL);
@@ -220,28 +226,53 @@ int main() {
     uint32_t LC = 0, RC = 0;
 
     uint32_t downsampleCounter = 0;
-    const uint32_t SAMPLES_PER_PIXEL = 12; // Approx (44100/30)/128
+    const uint32_t SAMPLES_PER_PIXEL = 12;
     bool displayQueueFull = false;
     bool displayQueueEmpty = true;
- while(1) {
+
+ while(1){
+    static bool lastButtonState = false;
+    static uint32_t lastDebounceTime = 0;
+    const uint32_t DEBOUNCE_MS = 100;
+    bool buttonState = gpio_get(CHANGE_MODE);
+    uint32_t now = time_us_32() / 1000;
+
+    if (buttonState && !lastButtonState && (now - lastDebounceTime > DEBOUNCE_MS)) {
+        lastDebounceTime = now;
+        switch (mode) {
+            case Mode::Pass:
+                mode = Mode::Lowpass;
+                currentFilter = LowPass;
+                break;
+            case Mode::Lowpass:
+                mode = Mode::Highpass;
+                currentFilter = HighPass;
+                break;
+            case Mode::Highpass:
+                mode = Mode::Pass;
+                currentFilter = Pass;
+                break;
+        }
+    }
+    lastButtonState = buttonState;
     if (adc0.newValue()) alpha = clamp(alphaMin, adc0.trueValue() / 3.3f, alphaMax);
     if (alpha == alphaMin) alpha = 0.0f;
-
     uint32_t rxBuf[reservedMemDepth];
     if (i2sRx.readBuffer(rxBuf)) {
     for (int i = 0; i < reservedMemDepth; i++) {
-        filterOutput = currentFilter(uint2float(rxBuf[i]));
-        uint32_t output = float2uint(filterOutput);
-        i2sTx.queue(output, output);
+        uint32_t raw = rxBuf[i];
+        filterOutput = currentFilter(uint2float(raw));
+        uint32_t filtered = float2uint(filterOutput);
+        i2sTx.queue(filtered, raw);
     downsampleCounter++;
     if (downsampleCounter >= DOWNSAMPLE_FACTOR) {
-        queue_try_add(&sharedQueue, &output);
+        queue_try_add(&sharedQueue, &filtered);
         downsampleCounter = 0;
+                }
+            }
+        }
     }
 }
-    }
-}
-    }
 
 
 /////////////////////////////////////
