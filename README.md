@@ -1,3 +1,43 @@
+# Modular Audio Processor (Beta Build)
+
+## Completed Work
+During the beta building phase, we primarily focused on transitioning from our breadboard prototype to a robust, integrated hardware system and improving the intermodular communication.
+
+### Hardware and Physical Design
+- Designed and implemented the first iteration of 3D-printed casings and moved away from prototyping breadboards.
+- Replaced breadboard wiring with magnetic pogo pins for connection between modules
+- Most internal components have been successfully fitted into their respective module casings.
+
+### Firmware and Intermodular Communication
+- Switched from SPI to I2S protocol using the RP2040's PIO to ensure stereo alignment and better audio quality.
+- Switched from Arduino to the C++ SDK for coding to have better control over precision timing.
+- Modules now have a persistent state in which they store the most recent filter settings and parameters in memory and retaining them even after being disconnected.
+- Implemented a dual-core optimization strategy in which Core 0 handles I2S and DSP operations and Core 1 handles the UI and OLED display to prevent high latency.
+
+### DSP Features
+- Implemented special effect modes (Reverb, Gain, and Distortion) with adjustable parameters.
+
+## Project Architecture
+
+### Core Allocation
+- The system is built on the Adafruit Feather RP2040 dual-core architecture.
+- Core 0 is responsible for starting I2S DMA, reading 16-bit samples, applying DSP math (filtering/effects), and writing the output to the I2S bus.
+- Core 1 is responsible for managing the user interface, including reading the adjustable knob value, plotting the waveforms/FFT, and refreshing the OLED display.
+
+### State Logic
+- The modules operate on a state-machine logic.
+1. Upon powering up, the module searches for a Word Select and Bit Clock signal for syncing.
+2. Once a clock match is found, the module enters a processing loop (Read -> Process -> Write)
+3. If a signal is lost, the system enters an error state or returns to syncing until a connection is restored.
+
+## Known Bugs and Limitations
+- There are occassional connectivity issues with the pogo pins. They sometimes require manual adjustment to maintain a signal.
+- The physical housing for user controls (knobs/buttons) have not yet been robustly designed.
+- Dedicated input and output modules have not yet been implemented. Currently, power and analog signals are supplied via manual wiring.
+- While the 3D-printed casing is structurally secure, the internal components require further mounting to prevent movement inside the casing.
+
+---
+
 # Modular Audio Processor (Alpha Build)
 
 ## Architecture
