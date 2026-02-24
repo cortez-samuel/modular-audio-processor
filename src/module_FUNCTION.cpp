@@ -49,9 +49,12 @@ static const float fs                   = 44100;
 static const uint8_t ADC_CHANNEL        = 0;
 static const uint8_t PIN_ADC_CHANNEL    = ADC_GET_CHANNEL_PIN(ADC_CHANNEL);
 static const uint8_t CHANGE_MODE        = 12;
+static const int ALPHA_AVG_WINDOW = 16;
+static float alphaBuffer[ALPHA_AVG_WINDOW] = {0};
+int alphaIndex = 0;
 
     // FILTERS
-static float alpha                      = 0.0f;
+static float volatile alpha                      = 0.0f;
 static float alphaMin                   = 0.033f;
 static float alphaMax                   = 1.0f;
 static float (*currentFilter)(float)    = nullptr;
@@ -160,8 +163,9 @@ void core1_entry() {
                             for (int dy = startY; dy <= endY; dy++) {
                                 oled.drawPixel(x, dy, true);
                             }
-                        } else {
-                            for (int dy = startY; dy >= endY; dy--) {
+                        }
+                        else{
+                            for(int dy = startY; dy >= endY; dy--) {
                                 oled.drawPixel(x, dy, true);
                             }
                         }
@@ -175,12 +179,20 @@ void core1_entry() {
                         // Draw mode indicator at bottom left
             oled.setTextSize(1); // 1 = 6x8 pixels per character
             oled.setTextColor(true);
-            oled.setCursor(0, 56); // Bottom left (display is 64px tall, text is 8px)
+            oled.setCursor(0, 0); // Bottom left (display is 64px tall, text is 8px)
             switch (mode) {
-                case Mode::Pass:      oled.print("ORG"); break;
+                case Mode::Pass:      oled.print("SRC"); break;
                 case Mode::Lowpass:   oled.print("LPF"); break;
                 case Mode::Highpass:  oled.print("HPF"); break;
             }
+            if (mode != Mode::Pass) {
+                float currentAlpha = alpha;
+                char alphaStr[12];
+                snprintf(alphaStr, sizeof(alphaStr), "a=%.2f", currentAlpha);
+                oled.setCursor(128 - (6 * 6), 0);
+                oled.print(alphaStr);
+            }
+
             oled.display();
         }
         
@@ -236,10 +248,9 @@ int main() {
     const uint32_t DEBOUNCE_MS = 100;
     bool buttonState = gpio_get(CHANGE_MODE);
     uint32_t now = time_us_32() / 1000;
-
-    if (buttonState && !lastButtonState && (now - lastDebounceTime > DEBOUNCE_MS)) {
+    if(buttonState && !lastButtonState && (now - lastDebounceTime > DEBOUNCE_MS)) {
         lastDebounceTime = now;
-        switch (mode) {
+        switch(mode){
             case Mode::Pass:
                 mode = Mode::Lowpass;
                 currentFilter = LowPass;
@@ -255,15 +266,23 @@ int main() {
         }
     }
     lastButtonState = buttonState;
-    if (adc0.newValue()) alpha = clamp(alphaMin, adc0.trueValue() / 3.3f, alphaMax);
-    if (alpha == alphaMin) alpha = 0.0f;
+if (adc0.newValue()) {
+    float targetAlpha = clamp(alphaMin, adc0.trueValue() / 3.3f, alphaMax);
+    
+    // Exponential smoothing: higher value (e.g., 0.1) = faster response, 
+    // lower value (e.g., 0.01) = smoother/slower.
+    float smoothingFactor = 0.05f; 
+    alpha = (targetAlpha * smoothingFactor) + (alpha * (1.0f - smoothingFactor));
+
+    if (alpha <= alphaMin + 0.005f) alpha = 0.0f;
+}
     uint32_t rxBuf[reservedMemDepth];
     if (i2sRx.readBuffer(rxBuf)) {
     for (int i = 0; i < reservedMemDepth; i++) {
         uint32_t raw = rxBuf[i];
         filterOutput = currentFilter(uint2float(raw));
         uint32_t filtered = float2uint(filterOutput);
-        i2sTx.queue(filtered, raw);
+        i2sTx.queue(filtered, filtered);
     downsampleCounter++;
     if (downsampleCounter >= DOWNSAMPLE_FACTOR) {
         queue_try_add(&sharedQueue, &filtered);
