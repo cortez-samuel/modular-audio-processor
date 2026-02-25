@@ -33,15 +33,15 @@ set(PICO_BOARD adafruit_feather_rp2040 CACHE STRING "Board type")
 include(pico_sdk_import.cmake)
 
 
-    # name project the name of executable being run/tested
+# name project the name of executable being run/tested
 project(module_FUNCTION C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 ######### OLED ##########
-add_executable(oled_test 
-    test/oled_test.cpp 
+add_executable(oled_test
+    test/oled_test.cpp
     libraries/oled.cpp
 )
 
@@ -77,7 +77,7 @@ target_include_directories(adc_test PRIVATE
 pico_add_extra_outputs(adc_test)
 
 ########## I2S / PIO ##########
-add_executable(I2S_Tx_test     
+add_executable(I2S_Tx_test
     test/I2S_Tx_test.cpp
     libraries/I2S.cpp
 )
@@ -92,7 +92,7 @@ target_link_libraries(I2S_Tx_test
     hardware_pio
     hardware_dma
 )
-target_include_directories(I2S_Tx_test PRIVATE 
+target_include_directories(I2S_Tx_test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(I2S_Tx_test)
@@ -113,7 +113,7 @@ target_link_libraries(I2S_Rx_test
     hardware_dma
     hardware_irq
 )
-target_include_directories(I2S_Rx_test PRIVATE 
+target_include_directories(I2S_Rx_test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(I2S_Rx_test)
@@ -139,7 +139,7 @@ pico_add_extra_outputs(SPI_master_pio_test)
 
 
 ########## MAIN MASTER ##########
-add_executable(main_master     
+add_executable(main_master
     src/main_master.cpp
     libraries/oled.cpp
 )
@@ -158,7 +158,7 @@ target_link_libraries(main_master
     hardware_dma
     hardware_irq
 )
-target_include_directories(main_master PRIVATE 
+target_include_directories(main_master PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(main_master)
@@ -167,11 +167,11 @@ pico_add_extra_outputs(main_master)
 ########## MAIN .CPP FILES ##########
 
 ### AUDIO INPUT MODULE ###
-add_executable(module_INPUT     
+add_executable(module_INPUT
     src/module_INPUT.cpp
     libraries/I2S.cpp
     libraries/RxPingPong.cpp
-    libraries/adc.cpp 
+    libraries/adc.cpp
 )
 pico_generate_pio_header(module_INPUT ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_naive.pio)
 pico_generate_pio_header(module_INPUT ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_compact.pio)
@@ -187,17 +187,17 @@ target_link_libraries(module_INPUT
     hardware_dma
     hardware_irq
 )
-target_include_directories(module_INPUT PRIVATE 
+target_include_directories(module_INPUT PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(module_INPUT)
 
 ### AUDIO DSP MODULE ###
-add_executable(module_FUNCTION     
+add_executable(module_FUNCTION
     src/module_FUNCTION.cpp
     libraries/I2S.cpp
     libraries/RxPingPong.cpp
-    libraries/adc.cpp 
+    libraries/adc.cpp
     libraries/oled.cpp
 )
 pico_generate_pio_header(module_FUNCTION ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_naive.pio)
@@ -217,17 +217,17 @@ target_link_libraries(module_FUNCTION
     hardware_irq
     hardware_spi
 )
-target_include_directories(module_FUNCTION PRIVATE 
+target_include_directories(module_FUNCTION PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(module_FUNCTION)
 
 ### AUDIO OUTPUT MODULE ###
-add_executable(module_OUTPUT     
+add_executable(module_OUTPUT
     src/module_OUTPUT.cpp
     libraries/I2S.cpp
     libraries/RxPingPong.cpp
-    libraries/adc.cpp 
+    libraries/adc.cpp
 )
 pico_generate_pio_header(module_OUTPUT ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_naive.pio)
 pico_generate_pio_header(module_OUTPUT ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_compact.pio)
@@ -243,7 +243,7 @@ target_link_libraries(module_OUTPUT
     hardware_dma
     hardware_irq
 )
-target_include_directories(module_OUTPUT PRIVATE 
+target_include_directories(module_OUTPUT PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(module_OUTPUT)
