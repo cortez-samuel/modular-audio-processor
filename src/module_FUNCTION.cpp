@@ -8,6 +8,7 @@
 #include "../libraries/I2S.h"
 #include "../libraries/oled.h"
 #include "../libraries/adc.hpp"
+#include "../libraries/fft.hpp"
 
     // LED PIN
 static const uint LED_PIN       = 13;
@@ -64,9 +65,10 @@ static float LowPass(float x);
 static float HighPass(float x);
 
 enum class Mode {
-    Pass, 
+    Pass,
     Lowpass,
-    Highpass
+    Highpass,
+    FFT
 };
 static Mode mode = Mode::Pass;
 
@@ -122,60 +124,111 @@ void core1_entry() {
             circularBuffer[bufferWriteIndex] = sample;
             bufferWriteIndex = (bufferWriteIndex + 1) % CIRCULAR_BUFFER_SIZE;
         }
-        
+
         // Update display at fixed interval
         uint32_t now = time_us_32() / 1000; // Convert to ms
         if (now - lastDisplayTime >= DISPLAY_INTERVAL_MS) {
             lastDisplayTime = now;
             oled.clearDisplay();
-        for (int x = 0; x < 128; x++) {
-            if (x % 4 < 2) {
-                oled.drawPixel(x, 32, true); 
-            }
-        }
-            // Draw the waveform
-            int lastY = 32; // Start at center
-            for (int x = 0; x < 128; x++) {
-                // Map screen x coordinate to buffer index
-                // This ensures we use the entire circular buffer across the screen width
-                int bufferIndex = (bufferWriteIndex - CIRCULAR_BUFFER_SIZE + 
-                                  (x * CIRCULAR_BUFFER_SIZE) / 128 + CIRCULAR_BUFFER_SIZE) % CIRCULAR_BUFFER_SIZE;
-                
-                // Get sample and scale to screen height (64 pixels)
-                // Shift right by (I2S_WS_FRAME_WIDTH - 6) to map 16-bit to 0-63 range
-                uint8_t y = circularBuffer[bufferIndex] >> (I2S_WS_FRAME_WIDTH - 6);
-                
-                // Invert Y if needed (0 at top, 63 at bottom)
-                y = 63 - y;
-                
-                // Constrain to screen bounds
-                if (y > 63) y = 63;
-                
-                // Draw line from last point to current point (interpolation)
-                if (x > 0) {
-                    int diff = y - lastY;
-                    if (abs(diff) > 1) {
-                        // Draw vertical line to connect points
-                        int startY = lastY;
-                        int endY = y;
-                        if (diff > 0) {
-                            for (int dy = startY; dy <= endY; dy++) {
-                                oled.drawPixel(x, dy, true);
+
+            // special FFT handling
+            if (mode == Mode::FFT) {
+                // cheating a little bit by just using the start of the circular buffer as data.
+                // it's too fast to notice--it can be made better later
+
+                // make fixed data
+                fi16 fftIn[256];
+                for (int i = 0; i < 256; i++) {
+                    fftIn[i] = (fi16)circularBuffer[i];
+                }
+                // compensate for DC offset
+                int32_t mean;
+                for (int i = 0; i < 256; i++) {
+                    mean += fftIn[i];
+                }
+                mean >>= 8;
+                for (int i = 0; i < 256; i++) {
+                    fftIn[i] -= mean;
+                }
+
+                fi16_32 fftOut[256];
+                fft_fixed(fftIn, fftOut);
+
+                // use left half of FFT. output is guaranteed to be positive since it's magnitude
+                fi16_32 fftOut_max = 1;
+                for (int i = 0; i < 128; i++) {
+                    fftOut_max = (fftOut[i] > fftOut_max ? fftOut[i] : fftOut_max);
+                }
+
+                // very rough to avoid floats
+                uint8_t scale_factor;
+                bool max_gt_64k = fftOut_max > 65535;
+                scale_factor = max_gt_64k ? (fftOut_max/65535 + 1) : (65535/fftOut_max);
+
+                for (int x = 0; x < 128; x++) {
+                    uint16_t data_point = max_gt_64k ? (fftOut[x] / scale_factor) : (fftOut[x] * scale_factor);
+
+                    uint8_t y = data_point >> (I2S_WS_FRAME_WIDTH - 6);
+                    y = 63 - y;
+
+                    // draw bar
+                    for (int i = 63; i > y; i--) {
+                        oled.drawPixel(x, i, true);
+                    }
+                }
+            } else {
+                // dashed line
+                for (int x = 0; x < 128; x++) {
+                    if (x % 4 < 2) {
+                        oled.drawPixel(x, 32, true);
+                    }
+                }
+
+                // Draw the waveform
+                int lastY = 32; // Start at center
+                for (int x = 0; x < 128; x++) {
+                    // Map screen x coordinate to buffer index
+                    // This ensures we use the entire circular buffer across the screen width
+                    int bufferIndex = (bufferWriteIndex - CIRCULAR_BUFFER_SIZE +
+                                      (x * CIRCULAR_BUFFER_SIZE) / 128 + CIRCULAR_BUFFER_SIZE) % CIRCULAR_BUFFER_SIZE;
+
+                    // Get sample and scale to screen height (64 pixels)
+                    // Shift right by (I2S_WS_FRAME_WIDTH - 6) to map 16-bit to 0-63 range
+                    uint8_t y = circularBuffer[bufferIndex] >> (I2S_WS_FRAME_WIDTH - 6);
+
+                    // Invert Y if needed (0 at top, 63 at bottom)
+                    y = 63 - y;
+
+                    // Constrain to screen bounds
+                    if (y > 63) y = 63;
+
+                    // Draw line from last point to current point (interpolation)
+                    if (x > 0) {
+                        int diff = y - lastY;
+                        if (abs(diff) > 1) {
+                            // Draw vertical line to connect points
+                            int startY = lastY;
+                            int endY = y;
+                            if (diff > 0) {
+                                for (int dy = startY; dy <= endY; dy++) {
+                                    oled.drawPixel(x, dy, true);
+                                }
                             }
-                        }
-                        else{
-                            for(int dy = startY; dy >= endY; dy--) {
-                                oled.drawPixel(x, dy, true);
+                            else{
+                                for(int dy = startY; dy >= endY; dy--) {
+                                    oled.drawPixel(x, dy, true);
+                                }
                             }
                         }
                     }
+
+                    // Draw the main point
+                    oled.drawPixel(x, y, true);
+                    lastY = y;
                 }
-                
-                // Draw the main point
-                oled.drawPixel(x, y, true);
-                lastY = y;
             }
-                        // Draw mode indicator at bottom left
+
+            // Draw mode indicator at bottom left
             oled.setTextSize(1); // 1 = 6x8 pixels per character
             oled.setTextColor(true);
             oled.setCursor(0, 0); // Bottom left (display is 64px tall, text is 8px)
@@ -183,8 +236,9 @@ void core1_entry() {
                 case Mode::Pass:      oled.print("SRC"); break;
                 case Mode::Lowpass:   oled.print("LPF"); break;
                 case Mode::Highpass:  oled.print("HPF"); break;
+                case Mode::FFT:       oled.print("FFT"); break;
             }
-            if (mode != Mode::Pass) {
+            if (mode != Mode::Pass && mode != Mode::FFT) {
                 float currentAlpha = alpha;
                 char alphaStr[12];
                 snprintf(alphaStr, sizeof(alphaStr), "a=%.2f", currentAlpha);

@@ -223,6 +223,7 @@ add_executable(module_FUNCTION
     libraries/RxPingPong.cpp
     libraries/adc.cpp
     libraries/oled.cpp
+    libraries/fft.cpp
 )
 pico_generate_pio_header(module_FUNCTION ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_naive.pio)
 pico_generate_pio_header(module_FUNCTION ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_compact.pio)
