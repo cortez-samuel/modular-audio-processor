@@ -46,15 +46,15 @@ static const uint I2S_WS_FRAME_WIDTH    = 16;
 static const float fs                   = 44100;
 
     // ADC / USER INPUT
-static const uint8_t ADC_CHANNEL        = 0;
-static const uint8_t PIN_ADC_CHANNEL    = ADC_GET_CHANNEL_PIN(ADC_CHANNEL);
-static const uint8_t CHANGE_MODE        = 12;
-static const int ALPHA_AVG_WINDOW = 16;
-static float alphaBuffer[ALPHA_AVG_WINDOW] = {0};
-int alphaIndex = 0;
+static const uint8_t ALPHA_ADC_CHANNEL      = 0;
+static const uint8_t PIN_ALPHA_ADC_CHANNEL  = ADC_GET_CHANNEL_PIN(ALPHA_ADC_CHANNEL);
+static const uint8_t CHANGE_MODE            = 12;
+static const int ALPHA_AVG_WINDOW           = 16;
+static float alphaBuffer[ALPHA_AVG_WINDOW]  = {0};
+int alphaIndex                              = 0;
 
     // FILTERS
-static float volatile alpha                      = 0.0f;
+static float volatile alpha             = 0.0f;
 static float alphaMin                   = 0.033f;
 static float alphaMax                   = 1.0f;
 static float (*currentFilter)(float)    = nullptr;
@@ -80,7 +80,6 @@ static inline float clamp(float min, float x, float max) {
 //////////////////////////////////////////////////
 
 
-    // CORE 1 (OLED DISPLAY) MAIN
 // CORE 1 (OLED DISPLAY) MAIN
 void core1_entry() {
     // INITIALIZE OLED SCREEN
@@ -204,21 +203,33 @@ void core1_entry() {
     // CORE 0 (IO / FILTER) MAIN
 int main() {
     stdio_init_all();
+
+        // initialize LED pin
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
+    
+        // initialize PushButton pin
     gpio_init(CHANGE_MODE);
     gpio_set_dir(CHANGE_MODE, GPIO_IN);
     gpio_pull_down(CHANGE_MODE);
+
+        // initialize the sharedQueue for the cores
     queue_init(&sharedQueue, sizeof(uint32_t), 256);
+
+        // launch CORE1
     multicore_launch_core1(core1_entry);
+
+        // initialize I2S_TX and I2S_RX
     i2sTx.init(PIN_I2S_Tx_BCLK, PIN_I2S_Tx_WS, PIN_I2S_Tx_SD, fs, I2S_WS_FRAME_WIDTH);
     i2sRx.setReservedMem(reservedMem, reservedMemDepth);
     i2sRx.init(PIN_I2S_Rx_BCLK, PIN_I2S_Rx_WS, PIN_I2S_Rx_SD, fs, I2S_WS_FRAME_WIDTH);
     i2sTx.enable(true);
     i2sRx.enable(true);
+
+        // initialize ALPHA ADC channel
     ADC::init(10, true, false, 1, defaultADCRIQHandler);
-    ADC::enableChannel(ADC_CHANNEL, true);
-    ADC::setActiveChannel(ADC_CHANNEL);
+    ADC::enableChannel(ALPHA_ADC_CHANNEL, true);
+    ADC::setActiveChannel(ALPHA_ADC_CHANNEL);
     ADC::enableIRQ(true);
     ADC& adc0 = ADC::getActiveChannel();
 

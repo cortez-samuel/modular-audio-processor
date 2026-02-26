@@ -34,10 +34,34 @@ include(pico_sdk_import.cmake)
 
 
     # name project the name of executable being run/tested
-project(module_FUNCTION C CXX ASM)
+project(general_test C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
+
+######### GENERAL ##########
+add_executable(general_test
+    test/general_test.cpp
+    libraries/adc.cpp
+    libraries/I2S.cpp
+    libraries/RxPingPong.cpp
+)
+
+pico_enable_stdio_uart(general_test 0)
+pico_enable_stdio_usb(general_test 1)
+
+target_link_libraries(general_test
+    pico_stdlib
+    hardware_adc
+    hardware_irq
+    hardware_pio
+    hardware_dma
+    pico_float
+)
+target_include_directories(general_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+pico_add_extra_outputs(general_test)
 
 ######### OLED ##########
 add_executable(oled_test 
