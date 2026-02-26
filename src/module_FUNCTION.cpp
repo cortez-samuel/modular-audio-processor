@@ -110,11 +110,11 @@ void core1_entry() {
     static const int CIRCULAR_BUFFER_SIZE = 512; // Larger buffer for better history
     uint32_t circularBuffer[CIRCULAR_BUFFER_SIZE] = {0};
     int bufferWriteIndex = 0;
-    
+
     // For display timing
     uint32_t lastDisplayTime = 0;
     const uint32_t DISPLAY_INTERVAL_MS = 33; // ~30fps
-    
+
     while(1) {
         // Read all available samples from queue (non-blocking)
         uint32_t sample;
@@ -194,7 +194,7 @@ void core1_entry() {
 
             oled.display();
         }
-        
+
         // Small delay to prevent tight loop
         sleep_us(100);
     }
@@ -207,7 +207,7 @@ int main() {
         // initialize LED pin
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
-    
+
         // initialize PushButton pin
     gpio_init(CHANGE_MODE);
     gpio_set_dir(CHANGE_MODE, GPIO_IN);
@@ -253,51 +253,59 @@ int main() {
     bool displayQueueFull = false;
     bool displayQueueEmpty = true;
 
- while(1){
-    static bool lastButtonState = false;
-    static uint32_t lastDebounceTime = 0;
-    const uint32_t DEBOUNCE_MS = 100;
-    bool buttonState = gpio_get(CHANGE_MODE);
-    uint32_t now = time_us_32() / 1000;
-    if(buttonState && !lastButtonState && (now - lastDebounceTime > DEBOUNCE_MS)) {
-        lastDebounceTime = now;
-        switch(mode){
-            case Mode::Pass:
-                mode = Mode::Lowpass;
-                currentFilter = LowPass;
-                break;
-            case Mode::Lowpass:
-                mode = Mode::Highpass;
-                currentFilter = HighPass;
-                break;
-            case Mode::Highpass:
-                mode = Mode::Pass;
-                currentFilter = Pass;
-                break;
-        }
-    }
-    lastButtonState = buttonState;
-if (adc0.newValue()) {
-    float targetAlpha = clamp(alphaMin, adc0.trueValue() / 3.3f, alphaMax);
-    
-    // Exponential smoothing: higher value (e.g., 0.1) = faster response, 
-    // lower value (e.g., 0.01) = smoother/slower.
-    float smoothingFactor = 0.05f; 
-    alpha = (targetAlpha * smoothingFactor) + (alpha * (1.0f - smoothingFactor));
+    while(1){
+        static bool lastButtonState = false;
+        static uint32_t lastDebounceTime = 0;
+        const uint32_t DEBOUNCE_MS = 100;
+        bool buttonState = gpio_get(CHANGE_MODE);
+        uint32_t now = time_us_32() / 1000;
 
-    if (alpha <= alphaMin + 0.005f) alpha = 0.0f;
-}
-    uint32_t rxBuf[reservedMemDepth];
-    if (i2sRx.readBuffer(rxBuf)) {
-    for (int i = 0; i < reservedMemDepth; i++) {
-        uint32_t raw = rxBuf[i];
-        filterOutput = currentFilter(uint2float(raw));
-        uint32_t filtered = float2uint(filterOutput);
-        i2sTx.queue(filtered, filtered);
-    downsampleCounter++;
-    if (downsampleCounter >= DOWNSAMPLE_FACTOR) {
-        queue_try_add(&sharedQueue, &filtered);
-        downsampleCounter = 0;
+        if(buttonState && !lastButtonState && (now - lastDebounceTime > DEBOUNCE_MS)) {
+            lastDebounceTime = now;
+            switch(mode){
+                case Mode::Pass:
+                    mode = Mode::Lowpass;
+                    currentFilter = LowPass;
+                    break;
+                case Mode::Lowpass:
+                    mode = Mode::Highpass;
+                    currentFilter = HighPass;
+                    break;
+                case Mode::Highpass:
+                    mode = Mode::FFT;
+                    currentFilter = Pass;
+                    break;
+                case Mode::FFT:
+                    mode = Mode::Pass;
+                    currentFilter = Pass;
+                    break;
+            }
+        }
+
+        lastButtonState = buttonState;
+        if (adc0.newValue()) {
+            float targetAlpha = clamp(alphaMin, adc0.trueValue() / 3.3f, alphaMax);
+
+            // Exponential smoothing: higher value (e.g., 0.1) = faster response,
+            // lower value (e.g., 0.01) = smoother/slower.
+            float smoothingFactor = 0.05f;
+            alpha = (targetAlpha * smoothingFactor) + (alpha * (1.0f - smoothingFactor));
+
+            if (alpha <= alphaMin + 0.005f) alpha = 0.0f;
+        }
+        uint32_t rxBuf[reservedMemDepth];
+        uint32_t fftBuf[reservedMemDepth];
+
+        if (i2sRx.readBuffer(rxBuf)) {
+            for (int i = 0; i < reservedMemDepth; i++) {
+                uint32_t raw = rxBuf[i];
+                filterOutput = currentFilter(uint2float(raw));
+                uint32_t filtered = float2uint(filterOutput);
+                i2sTx.queue(filtered, filtered);
+                downsampleCounter++;
+                if (downsampleCounter >= DOWNSAMPLE_FACTOR) {
+                    queue_try_add(&sharedQueue, &filtered);
+                    downsampleCounter = 0;
                 }
             }
         }
