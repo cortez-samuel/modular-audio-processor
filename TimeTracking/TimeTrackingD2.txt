@@ -93,3 +93,9 @@ Noah McGlothlin :: 2/8/26 12:00am - 3:00am 2/8/36 5:00pm - 2/9/26 4:00am 2/11/26
        trying to reproduce it consistently.
   -- Can change to have variable width (num buffers), but either requires chaning the current logic or 
      just making it a template. 
+
+Noah McGlothlin :: 2/25/26 6:00pm - 6:30pm
+  -- soldered antother DAC for testing purposes, and display to be used for more modules.
+
+Noah McGlothlin :: 2/25/26 10:30pm - 2/26/26 3:00am 
+  -- got DAC working with output voltage in test file. Need to put on output module program.
