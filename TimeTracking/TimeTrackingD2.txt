@@ -99,3 +99,21 @@ Noah McGlothlin :: 2/25/26 6:00pm - 6:30pm
 
 Noah McGlothlin :: 2/25/26 10:30pm - 2/26/26 3:00am 
   -- got DAC working with output voltage in test file. Need to put on output module program.
+
+Eric Reichard :: 2/17/26  4:00am - 5:30am, 11:30am - 3:30pm 5.5hr
+  -- Casing
+
+Eric Reichard :: 2/20/26   1hr
+  -- Beta report
+
+Eric Reichard :: 2/24 12:30pm - 2:30pm, 4:30pm - 6:30 pm    4hr
+  -- Tested Gomes's print, measured what needed to be changed
+  -- Started rewiring modules for mini breadboard
+  -- Redesigning casing
+
+Eric Reichard :: 2/25/26 12:30pm - 8:30pm   8hr
+  -- Home depot, buying screws
+  -- Lab, assembling and wiring modules, troubleshooting
+
+Eric Reichard :: 2/25/26 11:00pm - 3:30am   4.5hr
+  -- Marston with Noah, assembly and DAC troubleshooting
