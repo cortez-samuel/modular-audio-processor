@@ -9,35 +9,6 @@
 #include "../libraries/adc.hpp"
 #include "../libraries/fft.hpp"
 
-// ---------------------------------------------------------------------------
-// Fixed-point convention  (_E = 15)
-//
-//   int16_t sample:  1 sign bit, 15 fractional bits
-//   Range  : [-1.0,  +0.999969...]   (i.e. 0x8000 -> -1.0, 0x7FFF -> ~+1.0)
-//   LSB    :  1/32768  ~  0.0000305
-//
-// Conversion helpers
-//   fix -> float : s_vol = (float)sample / 32768.0f
-//   float -> fix : sample = (int16_t)(s_vol * 32767.0f)   [with saturation]
-//
-// Storage convention
-//   Samples are kept as int16_t.  When stuffed into a uint32_t (queue,
-//   circularBuffer) the bit pattern is preserved by casting via uint16_t:
-//       store : uint32_t word = (uint32_t)(uint16_t)sample;
-//       load  : int16_t  s    = (int16_t)(uint16_t)word;
-//
-// I2S Tx convention
-//   i2sTx.queue(LC, RC) expects the 16-bit word in the lower 16 bits of the
-//   uint32_t argument.  queue() left-shifts by (32 - WS_frame_size) = 16
-//   before writing to the PIO FIFO, placing the signed 16-bit sample in the
-//   correct position for the DAC.
-//
-// I2S Rx convention
-//   The PIO ISR is configured for left-shift with autopush at WS_frame_size=16
-//   bits, so the captured sample arrives in the lower 16 bits of the 32-bit
-//   FIFO word.  Extract with: int16_t s = (int16_t)(uint16_t)rxBuf[i];
-// ---------------------------------------------------------------------------
-
     // LED PIN
 static const uint LED_PIN           = 13;
 static volatile uint LED_PIN_VALUE  = 0;
@@ -54,7 +25,7 @@ static const uint8_t PIN_CS         = 24;
 static volatile uint8_t DOWNSAMPLE_FACTOR   = 16;
 static const uint8_t    SHARED_BUFFER_WIDTH = 64;
 static const uint8_t    SHARED_BUFFER_DEPTH = 128;
-// Queue element is uint32_t; we store the int16_t bit-pattern in the low 16 bits.
+// store int16_t bit pattern in the low 16 bits.
 static queue_t sharedQueue;
 
     // I2S TX
@@ -87,7 +58,6 @@ int alphaIndex = 0;
 static float volatile alpha          = 0.0f;
 static float alphaMin                = 0.033f;
 static float alphaMax                = 1.0f;
-// Filter functions operate on normalised signed voltage in [-1.0, +1.0).
 static float (*currentFilter)(float) = nullptr;
 static float filterOutput            = 0.0f;
 static float Pass(float x);
@@ -96,13 +66,8 @@ static float HighPass(float x);
 
 enum class Mode { Pass, Lowpass, Highpass, FFT };
 static Mode mode = Mode::Pass;
+static const float _E_SCALE = 32768.0f;
 
-// ---------------------------------------------------------------------------
-// Fixed-point helpers
-// ---------------------------------------------------------------------------
-static const float _E_SCALE = 32768.0f;    // 2^15
-
-// int16_t fixed-point  ->  float in [-1.0, +0.999969...]
 static inline float fix_to_float(int16_t x) {
     return (float)x / _E_SCALE;
 }
@@ -114,15 +79,9 @@ static inline int16_t float_to_fix(float x) {
     return (int16_t)(x * 32767.0f);
 }
 
-// General float clamp
 static inline float clamp_f(float lo, float x, float hi) {
     return x < lo ? lo : (x > hi ? hi : x);
 }
-
-//////////////////////////////////////////////////
-//////////////////////////////////////////////////
-//////////////////////////////////////////////////
-
 
 // CORE 1 (OLED DISPLAY) MAIN
 void core1_entry() {
@@ -169,33 +128,20 @@ void core1_entry() {
             oled.clearDisplay();
 
             if (mode == Mode::FFT) {
-                // -------------------------------------------------------
-                // FFT display
-                // -------------------------------------------------------
-                // Re-interpret the stored uint32_t words as signed int16_t
-                // samples (bit-pattern in low 16 bits).
                 fi16 fftIn[256];
                 for (int i = 0; i < 256; i++) {
                     fftIn[i] = (fi16)(int16_t)(uint16_t)circularBuffer[i];
                 }
-
-                // Light DC removal – with a properly biased input the mean
-                // should already be ~0, but this costs little.
                 int32_t mean = 0;
                 for (int i = 0; i < 256; i++) { mean += fftIn[i]; }
-                mean >>= 8; // divide by 256
+                mean >>= 8;
                 for (int i = 0; i < 256; i++) { fftIn[i] -= (fi16)mean; }
-
                 fi16_32 fftOut[256];
                 fft_fixed(fftIn, fftOut);
-
-                // Normalise to screen height using left (positive-frequency) half only.
                 fi16_32 fftOut_max = 1;
                 for (int i = 0; i < 128; i++) {
                     if (fftOut[i] > fftOut_max) fftOut_max = fftOut[i];
                 }
-
-                // Integer scaling to avoid floats
                 bool       max_gt_64k  = fftOut_max > 65535;
                 uint32_t   scale       = max_gt_64k
                                              ? (uint32_t)(fftOut_max / 65535 + 1)
@@ -205,49 +151,36 @@ void core1_entry() {
                     uint16_t dp = (uint16_t)(max_gt_64k
                                                  ? (fftOut[x] / scale)
                                                  : (fftOut[x] * scale));
-                    // Map 16-bit magnitude to screen row [0..63] (top = loud)
                     uint8_t y = 63 - (uint8_t)(dp >> 10);
                     for (int row = 63; row > (int)y; row--) {
                         oled.drawPixel(x, row, true);
                     }
                 }
 
-            } else {
-                // -------------------------------------------------------
-                // Waveform display
-                // -------------------------------------------------------
-
-                // Centre dashed line
+            }
+            else {
                 for (int x = 0; x < 128; x++) {
-                    if (x % 4 < 2) oled.drawPixel(x, 32, true);
+                    if (x % 4 < 2){
+                        oled.drawPixel(x, 32, true);
+                    }
                 }
-
                 int lastY = 32;
                 for (int x = 0; x < 128; x++) {
                     int bufIdx = (bufferWriteIndex
                                   - CIRCULAR_BUFFER_SIZE
                                   + (x * CIRCULAR_BUFFER_SIZE) / 128
                                   + CIRCULAR_BUFFER_SIZE) % CIRCULAR_BUFFER_SIZE;
-
-                    // Recover signed sample from stored bit-pattern.
                     int16_t s = (int16_t)(uint16_t)circularBuffer[bufIdx];
-
-                    // Map signed int16_t [-32768, 32767] to screen row [0, 63].
-                    //   XOR with 0x8000 converts two's-complement to offset-binary:
-                    //     0x8000 (-32768) -> 0x0000 -> row 63  (bottom, most negative)
-                    //     0x0000 (     0) -> 0x8000 -> row 31  (centre)
-                    //     0x7FFF (+32767) -> 0xFFFF -> row  0  (top,    most positive)
                     uint16_t offset_bin = (uint16_t)s ^ 0x8000u;
                     uint8_t  y          = 63 - (uint8_t)(offset_bin >> 10);
-                    if (y > 63) y = 63; // clamp for safety
-
-                    // Connect to previous point with a vertical line segment
+                    if (y > 63) y = 63;
                     if (x > 0) {
                         int diff = (int)y - lastY;
                         if (diff > 0) {
                             for (int dy = lastY; dy <= (int)y; dy++)
                                 oled.drawPixel(x, dy, true);
-                        } else if (diff < 0) {
+                        }
+                        else if (diff < 0) {
                             for (int dy = lastY; dy >= (int)y; dy--)
                                 oled.drawPixel(x, dy, true);
                         }
@@ -317,88 +250,48 @@ int main() {
     ADC::enableIRQ(true);
     ADC& adc0 = ADC::getActiveChannel();
 
-    // Misc GPIO
     gpio_init(6);
     gpio_set_dir(6, GPIO_IN);
     gpio_pull_down(6);
-
     currentFilter = Pass;
-    mode          = Mode::Pass;
+    mode = Mode::Pass;
 
     ADC::run(true);
-
-    // -----------------------------------------------------------------------
-    // Main loop
-    // -----------------------------------------------------------------------
     uint32_t downsampleCounter = 0;
 
     while (true) {
-        // ---- Mode switching (debounced button) ----
-        static bool     lastButtonState  = false;
+    static bool lastButtonState = false;
         static uint32_t lastDebounceTime = 0;
-        const uint32_t  DEBOUNCE_MS      = 100;
-
-        bool     buttonState = gpio_get(CHANGE_MODE);
-        uint32_t now         = time_us_32() / 1000;
-
-        if (buttonState && !lastButtonState && (now - lastDebounceTime > DEBOUNCE_MS)) {
-            lastDebounceTime = now;
-            switch (mode) {
-                case Mode::Pass:
-                    mode = Mode::Lowpass;  currentFilter = LowPass; break;
-                case Mode::Lowpass:
-                    mode = Mode::Highpass; currentFilter = HighPass; break;
-                case Mode::Highpass:
-                    mode = Mode::FFT;      currentFilter = Pass;     break;
-                case Mode::FFT:
-                    mode = Mode::Pass;     currentFilter = Pass;     break;
+        const uint32_t DEBOUNCE_MS = 150;
+        bool buttonState = gpio_get(CHANGE_MODE);
+        uint32_t now = time_us_32() / 1000;
+        if (buttonState && !lastButtonState) {
+            if (now - lastDebounceTime > DEBOUNCE_MS) {
+                lastDebounceTime = now;
+                switch (mode) {
+                    case Mode::Pass: mode = Mode::Lowpass;  currentFilter = LowPass; break;
+                    case Mode::Lowpass: mode = Mode::Highpass; currentFilter = HighPass; break;
+                    case Mode::Highpass: mode = Mode::FFT; currentFilter = Pass; break;
+                    case Mode::FFT: mode = Mode::Pass; currentFilter = Pass; break;
+                }
             }
         }
         lastButtonState = buttonState;
-
-        // ---- Alpha potentiometer (smoothed) ----
-        if (adc0.newValue()) {
-            float target = clamp_f(alphaMin, adc0.trueValue() / 3.3f, alphaMax);
-            const float smooth = 0.05f;
-            alpha = target * smooth + alpha * (1.0f - smooth);
-            if (alpha <= alphaMin + 0.005f) alpha = 0.0f;
-        }
-
-        // ---- Audio processing ----
+        if (adc0.newValue()) alpha = clamp_f(alphaMin, adc0.trueValue() / 3.3f, alphaMax);
+        if (alpha == alphaMin) alpha = 0.0f;
         uint32_t rxBuf[reservedMemDepth];
-
         if (i2sRx.readBuffer(rxBuf)) {
             for (int i = 0; i < (int)reservedMemDepth; i++) {
-
-                // --- Extract signed 16-bit sample from I2S Rx FIFO word ---
-                // The PIO ISR shifts left (LSB-first into ISR), autopush at 16
-                // bits => the 16-bit sample occupies bits [15:0] of the 32-bit
-                // FIFO word.  Casting via uint16_t preserves the bit-pattern
-                // before sign-extending to int16_t.
                 int16_t raw_sample = (int16_t)(uint16_t)rxBuf[i];
-
-                // --- Convert to normalised signed float for filter ---
-                float s_vol = fix_to_float(raw_sample);   // in [-1.0, +1.0)
-
-                // --- Apply selected filter ---
+                float s_vol = fix_to_float(raw_sample);
                 float filtered_vol = currentFilter(s_vol);
-
-                // --- Saturate and convert back to signed fixed-point ---
-                filtered_vol   = clamp_f(-1.0f, filtered_vol, 1.0f);
+                filtered_vol = clamp_f(-1.0f, filtered_vol, 1.0f);
                 int16_t out_sample = float_to_fix(filtered_vol);
-
-                // --- Send to DAC via I2S Tx ---
-                // Preserve sign bits: cast int16_t -> uint16_t -> uint32_t.
-                // queue() will left-shift by 16, placing the sample in the MSBs
-                // of the 32-bit FIFO word as the DAC expects.
                 uint32_t tx_word = (uint32_t)(uint16_t)out_sample;
                 i2sTx.queue(tx_word, tx_word);
-
-                // --- Downsample for display queue ---
                 downsampleCounter++;
                 if (downsampleCounter >= DOWNSAMPLE_FACTOR) {
                     downsampleCounter = 0;
-                    // Store the int16_t bit-pattern in a uint32_t for the queue.
                     uint32_t q_word = (uint32_t)(uint16_t)out_sample;
                     queue_try_add(&sharedQueue, &q_word);
                 }
@@ -407,35 +300,17 @@ int main() {
     }
 }
 
-
-// ---------------------------------------------------------------------------
-// Filter implementations
-//
-// All filters receive and return normalised signed voltage in [-1.0, +1.0).
-//
-// LPF:  y[n] = alpha*x[n] + (1-alpha)*y[n-1]
-//   alpha -> 1 : passes everything (flat)
-//   alpha -> 0 : heavily smoothed (very low cutoff)
-//
-// HPF:  y[n] = alpha * (y[n-1] + x[n] - x[n-1])
-//   alpha -> 1 : passes everything (flat)
-//   alpha -> 0 : blocks everything
-//
-// Both filters are already centred at 0 with signed input, so there is no
-// DC-offset issue that required special handling with unsigned data.
-// ---------------------------------------------------------------------------
-
-float Pass(float x) {
+float Pass(float x){
     return x;
 }
 
-float LowPass(float x) {
+float LowPass(float x){
     static float y  = 0.0f;
     y = alpha * x + (1.0f - alpha) * y;
     return y;
 }
 
-float HighPass(float x) {
+float HighPass(float x){
     static float y  = 0.0f;
     static float x_prev = 0.0f;
     y = alpha * (y + x - x_prev);
