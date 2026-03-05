@@ -22,9 +22,6 @@
 
 class I2S_Tx {
 public:
-    static const uint8_t BUFFER_WIDTH = TxPingPong::WIDTH;
-
-public:
     uint WS_frame_size;
 
 public:
@@ -36,9 +33,10 @@ public:
 
 public:
     I2S_Tx();
-    I2S_Tx(uint32_t* reserved, uint8_t depth);
+    I2S_Tx(uint32_t* reserved, uint8_t width, uint8_t depth);
     
-    void setReservedMem(uint32_t* reserved, uint8_t depth);
+    void setReservedMem(uint32_t* reserved, uint8_t width, uint8_t depth);
+    void setDefaultData(uint32_t* defaultData);
     inline bool init(uint BCLK_pin, uint WS_pin, uint SD_pin, float fs, uint WS_frame_size) {
         this->WS_frame_size = WS_frame_size;
 

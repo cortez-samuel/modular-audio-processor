@@ -7,28 +7,28 @@
 #include "hardware/pio.h"
 #include "hardware/sync.h"
 
+#include <cstdio>
+
 class TxPingPong {
 public:
-    static const uint8_t WIDTH = 16;
-
-private:
     static inline TxPingPong* __dmaMap[12];
 
-    struct Buffer_t {
-        uint32_t* data;
-        Buffer_t* next;
+    struct DataBuffer_t {
+        uint32_t* start;
+        uint startIndex;
+        uint size;
     };
 
     uint _bufferDepth;
-    Buffer_t _buffers[WIDTH];
+    uint _bufferWidth;
     uint32_t* _reservedMem;
 
-    Buffer_t* _empty;
-    Buffer_t* _queued;
-    Buffer_t* _active;
-    Buffer_t* _filled;
+    uint32_t* _defaultData;
 
-    Buffer_t* _defaultData;
+    DataBuffer_t _empty;
+    uint32_t* _queued;
+    uint32_t* _active;
+    DataBuffer_t _filled;
 
     bool _running;
     bool _underflow;
@@ -36,10 +36,10 @@ private:
 
 public:
     TxPingPong();
-    TxPingPong(uint32_t* reserved, uint32_t* defaultData, uint32_t depth);
+    TxPingPong(uint32_t* reserved, uint32_t* defaultData, uint32_t width, uint32_t depth);
  
 public:
-    void setReservedSpace(uint32_t* reserved, uint32_t depth);
+    void setReservedSpace(uint32_t* reserved, uint32_t width, uint32_t depth);
     void setDefaultData(uint32_t* defaultData);
 
 public:
@@ -57,59 +57,54 @@ public:
         _underflow = false;
     }
 
-private:
-    void __time_critical_func(_appendBuffer)(Buffer_t** FIFO, Buffer_t* element) {
-        if (element == nullptr) return;
+public:
+    bool _appendBufferArray(DataBuffer_t& bufferArray) {
+        if (bufferArray.size == _bufferWidth - 2) return false;
 
-        uint32_t intStatus = save_and_disable_interrupts();
+        bufferArray.size++;
 
-        element->next = nullptr;
-        if (*FIFO == nullptr) {
-            *FIFO = element;
-        } 
-        else {
-            Buffer_t** tail = FIFO;
-            while ((*tail)->next != nullptr) { 
-                tail = &((*tail)->next); 
-            }
-            (*tail)->next = element;
-        }
-
-        restore_interrupts(intStatus);
+        return true;
     }
-    Buffer_t* __time_critical_func(_popBuffer)(Buffer_t** FIFO) {
-        if (*FIFO == nullptr) { 
-            return nullptr; 
+    uint32_t* _popBufferArray(DataBuffer_t& bufferArray) {
+        if (bufferArray.size == 0) return nullptr;
         
-        }
-        uint32_t intStatus = save_and_disable_interrupts();
+        uint32_t* ret = bufferArray.start;
+        bufferArray.size--;
+        bufferArray.startIndex = bufferArray.startIndex % _bufferWidth;
+        bufferArray.start = _reservedMem + _bufferDepth * ((bufferArray.startIndex) % _bufferWidth);
 
-        Buffer_t* res = *FIFO;
-        *FIFO = (*FIFO)->next;
-        
-        restore_interrupts(intStatus);
-        return res;
+        return ret;
     }
 
     void __time_critical_func(_IRQ)(int ch) {
-        _appendBuffer(&_empty, _active);
+            // _active always points to non-inclusive tail of _empty, so appendBufferArray(_empty) 'adds' _active to it
+            // // will fail if reserved mem looks like [empty | active | queued]
+            // move _queued to _active
+            // // basically 'increments' active in the array
+            // // if _queued == _defaultData, then _active still 'holds' the tail for _empty, but filled with _defaultData data
+            // pop head of _filled into _queued to mark it as queued
+            // // _filled is empty => _queued == nullptr, so 'fill' the (non-inclusive) head of _filled with _defaultData data
+        _appendBufferArray(_empty);
         _active = _queued;
-
-        if (_filled != nullptr) {
-            _queued = _popBuffer(&_filled);
-            dma_channel_set_read_addr(ch, _queued->data, false);
-        }
-        else {
+        _queued = _popBufferArray(_filled);
+        if (_queued == nullptr) {
+            // underflow
+            printf("underflow %u\n", ch);
+            _queued = _defaultData;
             _underflow = true;
-            _queued = nullptr;
-            dma_channel_set_read_addr(ch, _defaultData->data, false);
         }
 
         dma_irqn_acknowledge_channel(1, ch);
+        dma_channel_set_read_addr(ch, &_queued, false);
     }
     static void __time_critical_func(_clsIRQ)() {
+        static bool pin13val = 0;
+        gpio_put(13, pin13val);
+        pin13val = !pin13val;  
+        printf("clsIRQ\n"); 
         for (int ch = 0; ch < 12; ch++) {
             if (dma_channel_get_irq1_status(ch) && __dmaMap[ch] != nullptr) {
+                printf("clsIRQ2\n"); 
                 return __dmaMap[ch]->_IRQ(ch);
             }
         }

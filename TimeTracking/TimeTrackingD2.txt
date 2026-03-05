@@ -117,3 +117,8 @@ Eric Reichard :: 2/25/26 12:30pm - 8:30pm   8hr
 
 Eric Reichard :: 2/25/26 11:00pm - 3:30am   4.5hr
   -- Marston with Noah, assembly and DAC troubleshooting
+
+Noah McGLothlin :: 3/4/26 10:00pm - 3/5/26 3:00am 3/5/26 1:30pm - 3:30pm
+  -- Worked on getting I2S_Tx to work more like I2S_Rx (with the buffers/dma cycle)
+     and function with queuing batches alongside single data-entries.
+  -- -- Default output seems to be working

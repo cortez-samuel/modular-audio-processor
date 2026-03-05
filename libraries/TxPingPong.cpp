@@ -2,54 +2,60 @@
 
 TxPingPong::TxPingPong() {
     _reservedMem = nullptr;
+    _bufferWidth = 0;
     _bufferDepth = 0;
+    _defaultData = nullptr;
+
+    _empty          = {_reservedMem, 0, 0};
+    _active         = nullptr;
+    _queued         = nullptr;
+    _filled         = {_reservedMem, 0, 0};
+
     _running        = false;
     _underflow      = false;
     _offset         = 0;
-    _empty          = nullptr;
-    _active         = nullptr;
-    _queued         = nullptr;
-    _filled         = nullptr;
-    _defaultData    = nullptr;
 }
 
-TxPingPong::TxPingPong(uint32_t* reserved, uint32_t* defaultData, uint32_t depth) {
-    _reservedMem    = reserved;
-    _bufferDepth    = depth;
-    _running        = false;
-    _underflow      = false;
-    _offset         = 0;
-    _empty          = nullptr;
-    _active         = nullptr;
-    _queued         = nullptr;
-    _filled         = nullptr;
-    _defaultData    = nullptr;
-
-    for (int i = 0; i < WIDTH; i++) {
-        _buffers[i].data = &_reservedMem[_bufferDepth * i];
-        _appendBuffer(&_empty, &_buffers[i]); 
-    }
-    _defaultData->data = defaultData;
-}
-
-void TxPingPong::setReservedSpace(uint32_t* reserved, uint32_t depth) {
+TxPingPong::TxPingPong(uint32_t* reserved, uint32_t* defaultData, uint32_t width, uint32_t depth) {
     _reservedMem = reserved;
+    _bufferWidth = width;
     _bufferDepth = depth;
-    _empty          = nullptr;
+    _defaultData = defaultData;
+
+    _empty          = {_reservedMem, 0, 0};
     _active         = nullptr;
     _queued         = nullptr;
-    _filled         = nullptr;
-    for (int i = 0; i < WIDTH; i++) {
-        _buffers[i].data = &_reservedMem[_bufferDepth * i];
-        _appendBuffer(&_empty, &_buffers[i]); 
+    _filled         = {_reservedMem, 0, 0};
+    for (uint i = 0; i < width; i++) {
+        _appendBufferArray(_empty);
     }
+
+    _running        = false;
+    _underflow      = false;
+    _offset         = 0;
 }
 
+void TxPingPong::setReservedSpace(uint32_t* reserved, uint32_t width, uint32_t depth) {
+    _reservedMem = reserved;
+    _bufferWidth = width;
+    _bufferDepth = depth;
+
+    _empty          = {_reservedMem, 0, 0};
+    _active         = nullptr;
+    _queued         = nullptr;
+    _filled         = {_reservedMem, 0, 0} ;
+    for (uint i = 0; i < _bufferWidth; i++) {
+        _appendBufferArray(_empty); 
+    }
+}
 void TxPingPong::setDefaultData(uint32_t* defaultData) {
-    _defaultData->data = defaultData;
+    _defaultData = defaultData;
 }
 
 void TxPingPong::begin(PIO pio, uint sm) {
+    _active = _defaultData;
+    _queued = _defaultData;
+
     uint ch0, ch1;
     ch0 = dma_claim_unused_channel(true);
     ch1 = dma_claim_unused_channel(true);
@@ -63,8 +69,8 @@ void TxPingPong::begin(PIO pio, uint sm) {
         channel_config_set_chain_to(&c, ch1);
         channel_config_set_irq_quiet(&c, false);
         dma_channel_configure(ch0, &c,
-            _defaultData->data,
             &pio->txf[sm],
+            _active,
             _bufferDepth,
             false
         );
@@ -79,8 +85,8 @@ void TxPingPong::begin(PIO pio, uint sm) {
         channel_config_set_chain_to(&c, ch0);
         channel_config_set_irq_quiet(&c, false);
         dma_channel_configure(ch1, &c,
-            _defaultData->data,
             &pio->txf[sm],
+            _queued,
             _bufferDepth,
             false
         );
@@ -97,27 +103,30 @@ void TxPingPong::begin(PIO pio, uint sm) {
 }
 
 bool TxPingPong::queueBuffer(uint32_t* buff) {
-    if (_empty == nullptr) return false;
+    if (_empty.size == 0) return false;
 
-    Buffer_t* filledBuffer = _popBuffer(&_empty);
+    uint32_t* filledBuffer = _popBufferArray(_empty);
     for (int i = 0; i < _bufferDepth; i++) {
-        filledBuffer->data[i] = buff[i];
+        filledBuffer[i] = buff[i];
     }
-    _appendBuffer(&_filled, filledBuffer);
+    _appendBufferArray(_filled);
+
     _underflow = false;
     _offset = 0;
+
     return true;
 }
 bool TxPingPong::queue(uint32_t* in) {
-    if (_empty == nullptr) return false;
+    if (_empty.size == 0) return false;
 
-    _empty->data[_offset++] = *in;
+    _empty.start[_offset++] = *in;
     if (_offset == _bufferDepth) {
         _offset = 0;
-        Buffer_t* done = _popBuffer(&_empty);
-        _appendBuffer(&_filled, done);
+        uint32_t* done = _popBufferArray(_empty);
+        _appendBufferArray(_filled);
         _underflow = false;
     }
+    
     return true;
 }
 
