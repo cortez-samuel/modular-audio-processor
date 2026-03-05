@@ -13,8 +13,10 @@ int main() {
 
     stdio_init_all();
     
-    I2S_Tx i2sTx;
-    i2sTx.init(2, 3, 1, 100000, 16);
+    static const uint8_t depth = 128;
+    uint32_t reservedMem[I2S_Tx::BUFFER_WIDTH * depth];
+    I2S_Tx i2sTx(reservedMem, depth);
+    i2sTx.init(2, 3, 1, 1000, 16);
     i2sTx.enable(true);
 
     bool pin13 = 1;

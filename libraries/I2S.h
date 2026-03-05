@@ -2,9 +2,12 @@
 #define I2S__H
 
 #include "pico/stdlib.h"
+
 #include "hardware/pio.h"
 #include "hardware/dma.h"
+
 #include "RxPingPong.h"
+#include "TxPingPong.h"
 #include "I2S_Tx_naive.pio.h"
 #include "I2S_Tx_compact.pio.h"
 #include "I2S_Rx_naive.pio.h"
@@ -19,24 +22,23 @@
 
 class I2S_Tx {
 public:
+    static const uint8_t BUFFER_WIDTH = TxPingPong::WIDTH;
+
+public:
     uint WS_frame_size;
 
 public:
-    uint32_t txBuffer[4 << 1];  // [LC][RC][LC][RC][...]
-    uint8_t  head;
-    uint32_t* headAddr;
-
+    TxPingPong txPingPong;
 
     PIO pio;
     uint sm;
     uint offset;
 
-    int dataChannel;
-    int ctrlChannel;
-
 public:
     I2S_Tx();
+    I2S_Tx(uint32_t* reserved, uint8_t depth);
     
+    void setReservedMem(uint32_t* reserved, uint8_t depth);
     inline bool init(uint BCLK_pin, uint WS_pin, uint SD_pin, float fs, uint WS_frame_size) {
         this->WS_frame_size = WS_frame_size;
 
@@ -46,43 +48,20 @@ public:
             I2S_Tx_compact_init(pio, sm, BCLK_pin, WS_pin, SD_pin, fs, WS_frame_size);
         #endif
 
-        dma_channel_config_t c;
-        c = dma_channel_get_default_config(ctrlChannel);
-        channel_config_set_transfer_data_size(&c, DMA_SIZE_32);
-        channel_config_set_read_increment(&c, false);
-        channel_config_set_write_increment(&c, false);
-
-        dma_channel_configure(ctrlChannel, &c, 
-            &dma_hw->ch[dataChannel].al3_read_addr_trig,
-            &headAddr,
-            1,
-            false
-        );
-
-        c = dma_channel_get_default_config(dataChannel);
-        channel_config_set_transfer_data_size(&c, DMA_SIZE_32);
-        channel_config_set_read_increment(&c, true);
-        channel_config_set_write_increment(&c, false);
-        channel_config_set_dreq(&c, pio_get_dreq(pio, sm, true));
-        channel_config_set_chain_to(&c, ctrlChannel);
-        
-        dma_channel_configure(dataChannel, &c, 
-            &pio->txf[sm],
-            NULL,
-            2,
-            false
-        );
-        
         return true;
     }
-    
     void enable(bool start);
 
 public:
-    void queue(uint32_t LC, uint32_t RC);
-
-public:
-    const uint32_t* getData(uint32_t i) const;
+    inline bool queue(uint32_t LC, uint32_t RC) {
+        bool LC_valid, RC_valid;
+        LC_valid = txPingPong.queue(&LC);
+        RC_valid = txPingPong.queue(&RC);
+        return LC_valid && RC_valid;
+    }
+    inline bool queueBuffer(uint32_t* buff) {
+        return txPingPong.queueBuffer(buff);
+    }
 };
 
 

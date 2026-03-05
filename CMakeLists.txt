@@ -6,8 +6,6 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-option(_PROD ON)
-
 # Initialise pico_sdk from installed location
 # (note this can come from environment, CMake cache etc)
 
@@ -34,7 +32,7 @@ include(pico_sdk_import.cmake)
 
 
 # name project the name of executable being run/tested
-project(module_FUNCTION C CXX ASM)
+project(I2S_Tx_test C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -104,6 +102,7 @@ pico_add_extra_outputs(adc_test)
 add_executable(I2S_Tx_test
     test/I2S_Tx_test.cpp
     libraries/I2S.cpp
+    libraries/TxPingPong.cpp
 )
 pico_generate_pio_header(I2S_Tx_test ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_naive.pio)
 pico_generate_pio_header(I2S_Tx_test ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Tx_compact.pio)
@@ -161,6 +160,8 @@ target_include_directories(SPI_master_pio_test PRIVATE
 )
 pico_add_extra_outputs(SPI_master_pio_test)
 
+
+if (0)
 
 ########## MAIN MASTER ##########
 add_executable(main_master
@@ -272,3 +273,5 @@ target_include_directories(module_OUTPUT PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(module_OUTPUT)
+
+endif()

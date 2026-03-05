@@ -20,6 +20,7 @@ static const uint _E = 12;
 int main() {
     stdio_init_all();
 
+    /*
     ADC::init(fs, true, false, 1, defaultADCRIQHandler);
     ADC::enableChannel(ADC_CHANNEL, true);
     ADC::setActiveChannel(ADC_CHANNEL);
@@ -41,6 +42,8 @@ int main() {
             int32_t sentData = (int32_t)(((voltage - 1.5) / 3.3) * 0x7FFF);
             printf("\t sent data: %04x\n", sentData);
             i2sTx.queue(sentData, sentData);
-        }
+        
+            }
     }
+    */
 }
