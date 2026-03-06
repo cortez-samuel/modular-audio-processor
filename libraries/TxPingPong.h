@@ -32,7 +32,7 @@ public:
 
     bool _running;
     bool _underflow;
-    uint _offset;
+    uint32_t _offset;
 
 public:
     TxPingPong();
@@ -70,8 +70,8 @@ public:
         
         uint32_t* ret = bufferArray.start;
         bufferArray.size--;
-        bufferArray.startIndex = bufferArray.startIndex % _bufferWidth;
-        bufferArray.start = _reservedMem + _bufferDepth * ((bufferArray.startIndex) % _bufferWidth);
+        bufferArray.startIndex = (bufferArray.startIndex + 1) % _bufferWidth;
+        bufferArray.start = _reservedMem + _bufferDepth * bufferArray.startIndex;
 
         return ret;
     }
@@ -95,21 +95,37 @@ public:
         }
 
         dma_irqn_acknowledge_channel(1, ch);
-        dma_channel_set_read_addr(ch, &_queued, false);
+        dma_channel_set_read_addr(ch, _queued, false);
     }
     static void __time_critical_func(_clsIRQ)() {
         static bool pin13val = 0;
         gpio_put(13, pin13val);
         pin13val = !pin13val;  
-        printf("clsIRQ\n"); 
+        //printf("clsIRQ\n"); 
         for (int ch = 0; ch < 12; ch++) {
             if (dma_channel_get_irq1_status(ch) && __dmaMap[ch] != nullptr) {
-                printf("clsIRQ2\n"); 
+                //printf("clsIRQ2\n"); 
                 return __dmaMap[ch]->_IRQ(ch);
             }
         }
     }
     
+    void __time_critical_func(_debugIRQ)() {
+        _appendBufferArray(_empty);
+        _active = _queued;
+        _queued = _popBufferArray(_filled);
+        if (_queued == nullptr) {
+            // underflow
+            printf("underflow %u\n", 0);
+            _queued = _defaultData;
+            _underflow = true;
+        }
+    }
+
+    inline void _printdetails() const {
+        printf("%u :: \n\tempty{%u, %u} \n\tactive{%u} \n\tqueued{%u} \n\tfilled{%u, %u} \n\tdefault{%u} \n", 
+            0, _empty.start, _empty.size, _active, _queued, _filled.start, _filled.size, _defaultData);
+    }
 };
 
 #endif

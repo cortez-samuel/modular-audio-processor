@@ -33,9 +33,9 @@ public:
 
 public:
     I2S_Tx();
-    I2S_Tx(uint32_t* reserved, uint8_t width, uint8_t depth);
+    I2S_Tx(uint32_t* reserved, uint32_t width, uint32_t depth);
     
-    void setReservedMem(uint32_t* reserved, uint8_t width, uint8_t depth);
+    void setReservedMem(uint32_t* reserved, uint32_t width, uint32_t depth);
     void setDefaultData(uint32_t* defaultData);
     inline bool init(uint BCLK_pin, uint WS_pin, uint SD_pin, float fs, uint WS_frame_size) {
         this->WS_frame_size = WS_frame_size;
@@ -53,8 +53,10 @@ public:
 public:
     inline bool queue(uint32_t LC, uint32_t RC) {
         bool LC_valid, RC_valid;
-        LC_valid = txPingPong.queue(&LC);
-        RC_valid = txPingPong.queue(&RC);
+        uint32_t LC_shifted = LC << (32 - WS_frame_size);
+        uint32_t RC_shifted = RC << (32 - WS_frame_size);
+        LC_valid = txPingPong.queue(&LC_shifted);
+        RC_valid = txPingPong.queue(&RC_shifted);
         return LC_valid && RC_valid;
     }
     inline bool queueBuffer(uint32_t* buff) {

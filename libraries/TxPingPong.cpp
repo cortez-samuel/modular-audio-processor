@@ -23,8 +23,8 @@ TxPingPong::TxPingPong(uint32_t* reserved, uint32_t* defaultData, uint32_t width
     _defaultData = defaultData;
 
     _empty          = {_reservedMem, 0, 0};
-    _active         = nullptr;
-    _queued         = nullptr;
+    _active         = _defaultData;
+    _queued         = _defaultData;
     _filled         = {_reservedMem, 0, 0};
     for (uint i = 0; i < width; i++) {
         _appendBufferArray(_empty);
@@ -41,8 +41,8 @@ void TxPingPong::setReservedSpace(uint32_t* reserved, uint32_t width, uint32_t d
     _bufferDepth = depth;
 
     _empty          = {_reservedMem, 0, 0};
-    _active         = nullptr;
-    _queued         = nullptr;
+    _active         = _defaultData;
+    _queued         = _defaultData;
     _filled         = {_reservedMem, 0, 0} ;
     for (uint i = 0; i < _bufferWidth; i++) {
         _appendBufferArray(_empty); 
@@ -119,14 +119,15 @@ bool TxPingPong::queueBuffer(uint32_t* buff) {
 bool TxPingPong::queue(uint32_t* in) {
     if (_empty.size == 0) return false;
 
-    _empty.start[_offset++] = *in;
+    _empty.start[_offset] = *in;
+    _offset++;
     if (_offset == _bufferDepth) {
         _offset = 0;
         uint32_t* done = _popBufferArray(_empty);
         _appendBufferArray(_filled);
         _underflow = false;
     }
-    
+
     return true;
 }
 
