@@ -33,14 +33,18 @@ static const uint8_t PIN_I2S_Tx_SD   = 0;
 static const uint8_t PIN_I2S_Tx_BCLK = 2;
 static const uint8_t PIN_I2S_Tx_WS   = 3;
 static I2S_Tx i2sTx;
+static const uint32_t Tx_reservedMemDepth = 128;
+static const uint32_t Tx_reservedMemWidth = 8;
+static uint32_t Tx_reservedMem[Tx_reservedMemDepth * Tx_reservedMemWidth];
+static uint32_t Tx_defaultMem[Tx_reservedMemDepth];
 
     // I2S RX
 static const uint8_t PIN_I2S_Rx_SD   = 7;
 static const uint8_t PIN_I2S_Rx_BCLK = 8;
 static const uint8_t PIN_I2S_Rx_WS   = 9;
 static I2S_Rx i2sRx;
-static const uint32_t reservedMemDepth = 128;
-static uint32_t reservedMem[reservedMemDepth * RxPingPong::WIDTH];
+static const uint32_t Rx_reservedMemDepth = 128;
+static uint32_t Rx_reservedMem[Rx_reservedMemDepth * RxPingPong::WIDTH];
 
     // I2S GENERAL
 static const uint  I2S_WS_FRAME_WIDTH = 16;
@@ -237,9 +241,12 @@ int main() {
     multicore_launch_core1(core1_entry);
 
     // I2S init
+    i2sTx.setReservedMem(Tx_reservedMem, Tx_defaultMem, Tx_reservedMemWidth, Tx_reservedMemDepth);
     i2sTx.init(PIN_I2S_Tx_BCLK, PIN_I2S_Tx_WS, PIN_I2S_Tx_SD, fs, I2S_WS_FRAME_WIDTH);
-    i2sRx.setReservedMem(reservedMem, reservedMemDepth);
+
+    i2sRx.setReservedMem(Rx_reservedMem, Rx_reservedMemDepth);
     i2sRx.init(PIN_I2S_Rx_BCLK, PIN_I2S_Rx_WS, PIN_I2S_Rx_SD, fs, I2S_WS_FRAME_WIDTH);
+
     i2sTx.enable(true);
     i2sRx.enable(true);
 
@@ -260,7 +267,8 @@ int main() {
     uint32_t downsampleCounter = 0;
 
     while (true) {
-    static bool lastButtonState = false;
+        /*
+        static bool lastButtonState = false;
         static uint32_t lastDebounceTime = 0;
         const uint32_t DEBOUNCE_MS = 150;
         bool buttonState = gpio_get(CHANGE_MODE);
@@ -277,18 +285,26 @@ int main() {
             }
         }
         lastButtonState = buttonState;
+        */
+
         if (adc0.newValue()) alpha = clamp_f(alphaMin, adc0.trueValue() / 3.3f, alphaMax);
         if (alpha == alphaMin) alpha = 0.0f;
-        uint32_t rxBuf[reservedMemDepth];
+
+        uint32_t rxBuf[Rx_reservedMemDepth];
+        uint32_t txBuf[Tx_reservedMemDepth];
         if (i2sRx.readBuffer(rxBuf)) {
-            for (int i = 0; i < (int)reservedMemDepth; i++) {
+            for (uint i = 0; i < Rx_reservedMemDepth; i++) {
+                    // get sample
                 int16_t raw_sample = (int16_t)(uint16_t)rxBuf[i];
+                    // do filter
                 float s_vol = fix_to_float(raw_sample);
                 float filtered_vol = currentFilter(s_vol);
                 filtered_vol = clamp_f(-1.0f, filtered_vol, 1.0f);
                 int16_t out_sample = float_to_fix(filtered_vol);
+                    // output sample
                 uint32_t tx_word = (uint32_t)(uint16_t)out_sample;
                 i2sTx.queue(tx_word, tx_word);
+
                 downsampleCounter++;
                 if (downsampleCounter >= DOWNSAMPLE_FACTOR) {
                     downsampleCounter = 0;

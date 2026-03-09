@@ -118,10 +118,13 @@ Eric Reichard :: 2/25/26 12:30pm - 8:30pm   8hr
 Eric Reichard :: 2/25/26 11:00pm - 3:30am   4.5hr
   -- Marston with Noah, assembly and DAC troubleshooting
 
-Noah McGlothlin :: 3/4/26 10:00pm - 3:00am 3/5/26 1:30pm - 3:30pm 11:30pm - 3:30am
+Noah McGlothlin :: 3/4/26 10:00pm - 3:00am 3/5/26 1:30pm - 3:30pm 11:30pm - 3:30am 3/8/19 11:30pm - 3/9/3:30am
   -- Worked on getting I2S_Tx to work more like I2S_Rx (with the buffers/dma cycle)
      and function with queuing batches alongside single data-entries.
   -- -- Default output seems to be working
-  -- Get queuing working (using cyclic buffers instead of linked-list approch used by RxPingPong)
+  -- Get queuing working (using cyclic buffers instead of linked-list approach used by RxPingPong)
   -- -- allows for user to set buffer width + depth instead of just depth
   -- -- seems to be working, want to do more thorough testing though
+  -- Everything seems to be working + tested, needed to debug some when adding automatic WS shifting, 
+     tried to add a blocking 'queue' thing but needs some work. 
+  -- -- Changed input I2S_Tx since that seemed to be stalling.

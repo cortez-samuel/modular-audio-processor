@@ -9,23 +9,23 @@ I2S_Tx::I2S_Tx() :
         pio_claim_free_sm_and_add_program(&I2S_Tx_compact_program, &pio, &sm, &offset);
     #endif
 }
-I2S_Tx::I2S_Tx(uint32_t* reservedMem, uint32_t width, uint32_t depth) : 
+I2S_Tx::I2S_Tx(uint32_t* reservedMem, uint32_t* defaultSpace, uint32_t width, uint32_t depth) : 
         WS_frame_size(0) {
-
+            
     #if     I2S_TX_PROGRAM == I2S_TX_PROGRAM__NAIVE
         pio_claim_free_sm_and_add_program(&I2S_Tx_naive_program, &pio, &sm, &offset);
     #elif   I2S_TX_PROGRAM == I2S_TX_PROGRAM__COMPACT
         pio_claim_free_sm_and_add_program(&I2S_Tx_compact_program, &pio, &sm, &offset);
     #endif
 
-    setReservedMem(reservedMem, width, depth);
+    setReservedMem(reservedMem, defaultSpace, width, depth);
 }
 
-void I2S_Tx::setReservedMem(uint32_t* reservedMem, uint32_t width, uint32_t depth) {
-    txPingPong.setReservedSpace(reservedMem, width, depth);
+void I2S_Tx::setReservedMem(uint32_t* reservedMem, uint32_t* defaultSpace, uint32_t width, uint32_t depth) {
+    txPingPong.setReservedSpace(reservedMem, defaultSpace, width, depth);
 }
 void I2S_Tx::setDefaultData(uint32_t* defaultData) {
-    txPingPong.setDefaultData(defaultData);
+    txPingPong.setDefaultData(defaultData, WS_frame_size);
 }
 
 void I2S_Tx::enable(bool start) {

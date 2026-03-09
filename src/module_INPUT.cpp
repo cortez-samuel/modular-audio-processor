@@ -5,13 +5,18 @@
 #include <cstdio>
 #include <cstdint>
 
+    // ADC / AUDIO INPUT
 static const uint8_t ADC_CHANNEL = 0;
 static const uint8_t PIN_ADC_CHANNEL = ADC_GET_CHANNEL_PIN(ADC_CHANNEL);
+
+    // I2S Tx
 static const uint8_t PIN_I2S_Tx_SD = 0;
 static const uint8_t PIN_I2S_Tx_BCLK = 2;
 static const uint8_t PIN_I2S_Tx_WS = 3;
 static const uint I2S_WS_FRAME_SIZE = 16;
 static const float fs = 44100;
+
+    // FIXED POINT
 static const int _E = 15;
 static const float _E_SCALE  = (float)(1 << _E);
 
@@ -33,21 +38,34 @@ static inline int16_t adc_raw_to_fix(uint16_t raw12) {
 
 int main() {
     stdio_init_all();
+
+        // ADC INIT
     ADC::init(fs, true, false, 1, defaultADCRIQHandler);
     ADC::enableChannel(ADC_CHANNEL, true);
     ADC::setActiveChannel(ADC_CHANNEL);
     ADC::enableIRQ(true);
     ADC& adc0 = ADC::getActiveChannel();
-    I2S_Tx i2sTx;
+
+        // I2S_Tx INIT
+    const uint Tx_reservedMemDepth = 128;
+    const uint Tx_reservedMemWidth = 8;
+    uint32_t Tx_reservedMem[Tx_reservedMemDepth * Tx_reservedMemWidth];
+    uint32_t Tx_defaultMem[Tx_reservedMemDepth];
+    I2S_Tx i2sTx(Tx_reservedMem, Tx_defaultMem, Tx_reservedMemWidth, Tx_reservedMemDepth);
+
     i2sTx.init(PIN_I2S_Tx_BCLK, PIN_I2S_Tx_WS, PIN_I2S_Tx_SD, fs, I2S_WS_FRAME_SIZE);
+
+        // ENABLE
     ADC::run(true);
     i2sTx.enable(true);
+
     int16_t lastSample = 0;
     while (true) {
         if (adc0.newValue()) {
             lastSample = adc_raw_to_fix(adc0.rawValue());
             uint32_t word = (uint32_t)(uint16_t)lastSample;
-            i2sTx.queue(word, word);
+            bool queued = false;
+            while(!queued) { queued = i2sTx.queue(word, word); }
         }
     }
 }

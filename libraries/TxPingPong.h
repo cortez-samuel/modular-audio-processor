@@ -15,15 +15,15 @@ public:
 
     struct DataBuffer_t {
         uint32_t* start;
-        uint startIndex;
-        uint size;
+        volatile uint startIndex;
+        volatile uint size;
     };
 
     uint _bufferDepth;
     uint _bufferWidth;
     uint32_t* _reservedMem;
 
-    uint32_t* _defaultData;
+    uint32_t* _defaultDataSpace;
 
     DataBuffer_t _empty;
     uint32_t* _queued;
@@ -36,18 +36,23 @@ public:
 
 public:
     TxPingPong();
-    TxPingPong(uint32_t* reserved, uint32_t* defaultData, uint32_t width, uint32_t depth);
+    TxPingPong(uint32_t* reserved, uint32_t* defaultDataSpace, uint32_t width, uint32_t depth);
  
 public:
-    void setReservedSpace(uint32_t* reserved, uint32_t width, uint32_t depth);
-    void setDefaultData(uint32_t* defaultData);
+    void setReservedSpace(uint32_t* reserved, uint32_t* defaultDataSpace, uint32_t width, uint32_t depth);
+    void setDefaultData(uint32_t* defaultData, uint WS_frame_size);
 
 public:
     void begin(PIO pio, uint sm);
 
 public:
-    bool queueBuffer(uint32_t* buff);
-    bool queue(uint32_t* in);
+    inline uint getQueueLevel() const {
+        return _filled.size;
+    }
+    bool queueBuffer(uint32_t* buff, uint WS_frame_size);
+    void queueBufferBlocking(uint32_t* buff, uint WS_frame_size);
+    bool queue(uint32_t in, uint WS_frame_size);
+    void queueBlocking(uint32_t in, uint WS_frame_size);
 
 public:
     inline bool underflow() const {
@@ -90,7 +95,7 @@ public:
         if (_queued == nullptr) {
             // underflow
             printf("underflow %u\n", ch);
-            _queued = _defaultData;
+            _queued = _defaultDataSpace;
             _underflow = true;
         }
 
@@ -117,14 +122,14 @@ public:
         if (_queued == nullptr) {
             // underflow
             printf("underflow %u\n", 0);
-            _queued = _defaultData;
+            _queued = _defaultDataSpace;
             _underflow = true;
         }
     }
 
     inline void _printdetails() const {
         printf("%u :: \n\tempty{%u, %u} \n\tactive{%u} \n\tqueued{%u} \n\tfilled{%u, %u} \n\tdefault{%u} \n", 
-            0, _empty.start, _empty.size, _active, _queued, _filled.start, _filled.size, _defaultData);
+            0, _empty.start, _empty.size, _active, _queued, _filled.start, _filled.size, _defaultDataSpace);
     }
 };
 

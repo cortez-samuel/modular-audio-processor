@@ -4,7 +4,7 @@ TxPingPong::TxPingPong() {
     _reservedMem = nullptr;
     _bufferWidth = 0;
     _bufferDepth = 0;
-    _defaultData = nullptr;
+    _defaultDataSpace = nullptr;
 
     _empty          = {_reservedMem, 0, 0};
     _active         = nullptr;
@@ -16,15 +16,17 @@ TxPingPong::TxPingPong() {
     _offset         = 0;
 }
 
-TxPingPong::TxPingPong(uint32_t* reserved, uint32_t* defaultData, uint32_t width, uint32_t depth) {
+TxPingPong::TxPingPong(uint32_t* reserved, uint32_t* defaultDataSpace, 
+                       uint32_t width, uint32_t depth) 
+        {
     _reservedMem = reserved;
+    _defaultDataSpace = defaultDataSpace;
     _bufferWidth = width;
     _bufferDepth = depth;
-    _defaultData = defaultData;
 
     _empty          = {_reservedMem, 0, 0};
-    _active         = _defaultData;
-    _queued         = _defaultData;
+    _active         = _defaultDataSpace;
+    _queued         = _defaultDataSpace;
     _filled         = {_reservedMem, 0, 0};
     for (uint i = 0; i < width; i++) {
         _appendBufferArray(_empty);
@@ -35,26 +37,31 @@ TxPingPong::TxPingPong(uint32_t* reserved, uint32_t* defaultData, uint32_t width
     _offset         = 0;
 }
 
-void TxPingPong::setReservedSpace(uint32_t* reserved, uint32_t width, uint32_t depth) {
+void TxPingPong::setReservedSpace(uint32_t* reserved, uint32_t* defaultDataSpace,
+                                  uint32_t width, uint32_t depth) 
+    {
     _reservedMem = reserved;
+    _defaultDataSpace = defaultDataSpace;
     _bufferWidth = width;
     _bufferDepth = depth;
 
     _empty          = {_reservedMem, 0, 0};
-    _active         = _defaultData;
-    _queued         = _defaultData;
+    _active         = _defaultDataSpace;
+    _queued         = _defaultDataSpace;
     _filled         = {_reservedMem, 0, 0} ;
     for (uint i = 0; i < _bufferWidth; i++) {
         _appendBufferArray(_empty); 
     }
 }
-void TxPingPong::setDefaultData(uint32_t* defaultData) {
-    _defaultData = defaultData;
+void TxPingPong::setDefaultData(uint32_t* defaultData, uint WS_frame_size) {
+    for (uint i = 0; i < _bufferDepth; i++) {
+        _defaultDataSpace[i] = defaultData[i] << (32 - WS_frame_size);
+    }
 }
 
 void TxPingPong::begin(PIO pio, uint sm) {
-    _active = _defaultData;
-    _queued = _defaultData;
+    _active = _defaultDataSpace;
+    _queued = _defaultDataSpace;
 
     uint ch0, ch1;
     ch0 = dma_claim_unused_channel(true);
@@ -102,12 +109,12 @@ void TxPingPong::begin(PIO pio, uint sm) {
     irq_set_enabled(DMA_IRQ_NUM(1), true);
 }
 
-bool TxPingPong::queueBuffer(uint32_t* buff) {
+bool TxPingPong::queueBuffer(uint32_t* buff, uint WS_frame_size) {
     if (_empty.size == 0) return false;
 
     uint32_t* filledBuffer = _popBufferArray(_empty);
     for (int i = 0; i < _bufferDepth; i++) {
-        filledBuffer[i] = buff[i];
+        filledBuffer[i] = buff[i] << (32 - WS_frame_size);
     }
     _appendBufferArray(_filled);
 
@@ -116,10 +123,15 @@ bool TxPingPong::queueBuffer(uint32_t* buff) {
 
     return true;
 }
-bool TxPingPong::queue(uint32_t* in) {
+void TxPingPong::queueBufferBlocking(uint32_t* buff, uint WS_frame_size) {
+    while (_empty.size == 0);
+
+    queueBuffer(buff, WS_frame_size);
+}
+bool TxPingPong::queue(uint32_t data, uint WS_frame_size) {
     if (_empty.size == 0) return false;
 
-    _empty.start[_offset] = *in;
+    _empty.start[_offset] = data << (32 - WS_frame_size);
     _offset++;
     if (_offset == _bufferDepth) {
         _offset = 0;
@@ -130,5 +142,9 @@ bool TxPingPong::queue(uint32_t* in) {
 
     return true;
 }
-
+void TxPingPong::queueBlocking(uint32_t data, uint WS_frame_size) {
+    while(1) {
+        if (queue(data, WS_frame_size)) { return; }
+    }
+}
 
