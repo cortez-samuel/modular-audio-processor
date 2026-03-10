@@ -128,3 +128,10 @@ Noah McGlothlin :: 3/4/26 10:00pm - 3:00am 3/5/26 1:30pm - 3:30pm 11:30pm - 3:30
   -- Everything seems to be working + tested, needed to debug some when adding automatic WS shifting, 
      tried to add a blocking 'queue' thing but needs some work. 
   -- -- Changed input I2S_Tx since that seemed to be stalling.
+
+Noah McGlothlin :: 3/10/26 4:00pm - 5:00pm
+  -- Debugged faulty Tx transmission on FUNCTION modules.
+  -- Pushed fix
+  -- -- currently averages LC and RC data from the rxBuffer, filters said average, 
+        then queues on both LC and RC channels for i2sTx. Can change to filtering 
+        LC and RC separately, but needs improved filter logic.
