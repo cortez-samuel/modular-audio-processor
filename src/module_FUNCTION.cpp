@@ -34,7 +34,7 @@ static const uint8_t PIN_I2S_Tx_BCLK = 2;
 static const uint8_t PIN_I2S_Tx_WS   = 3;
 static I2S_Tx i2sTx;
 static const uint32_t Tx_reservedMemDepth = 128;
-static const uint32_t Tx_reservedMemWidth = 8;
+static const uint32_t Tx_reservedMemWidth = 32;
 static uint32_t Tx_reservedMem[Tx_reservedMemDepth * Tx_reservedMemWidth];
 static uint32_t Tx_defaultMem[Tx_reservedMemDepth];
 
@@ -286,16 +286,20 @@ int main() {
         }
         lastButtonState = buttonState;
         */
-
+        /*
         if (adc0.newValue()) alpha = clamp_f(alphaMin, adc0.trueValue() / 3.3f, alphaMax);
         if (alpha == alphaMin) alpha = 0.0f;
+        */
 
         uint32_t rxBuf[Rx_reservedMemDepth];
         uint32_t txBuf[Tx_reservedMemDepth];
         if (i2sRx.readBuffer(rxBuf)) {
-            for (uint i = 0; i < Rx_reservedMemDepth; i++) {
+            bool queuedValid = true;
+            for (uint i = 0; i < Rx_reservedMemDepth/2; i++) {
                     // get sample
-                int16_t raw_sample = (int16_t)(uint16_t)rxBuf[i];
+                int16_t raw_sample_LC = (int16_t)(uint16_t)rxBuf[2*i];
+                int16_t raw_sample_RC = (int16_t)(uint16_t)rxBuf[2*i+1];
+                int16_t raw_sample = (raw_sample_LC >> 1) + (raw_sample_RC >> 1);
                     // do filter
                 float s_vol = fix_to_float(raw_sample);
                 float filtered_vol = currentFilter(s_vol);
@@ -303,7 +307,7 @@ int main() {
                 int16_t out_sample = float_to_fix(filtered_vol);
                     // output sample
                 uint32_t tx_word = (uint32_t)(uint16_t)out_sample;
-                i2sTx.queue(tx_word, tx_word);
+                queuedValid = i2sTx.queue(tx_word, tx_word) & queuedValid;
 
                 downsampleCounter++;
                 if (downsampleCounter >= DOWNSAMPLE_FACTOR) {
