@@ -126,6 +126,7 @@ add_executable(I2S_Rx_test
     libraries/RxPingPong.cpp
 )
 pico_generate_pio_header(I2S_Rx_test ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Rx_naive.pio)
+pico_generate_pio_header(I2S_Rx_test ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Rx_autoFrame.pio)
 
 pico_enable_stdio_uart(I2S_Rx_test 0)
 pico_enable_stdio_usb(I2S_Rx_test 1)

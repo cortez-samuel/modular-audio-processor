@@ -21,7 +21,7 @@ int main() {
     printf("1\n");
 
     static const uint8_t width = 8;
-    static const uint32_t depth = 4;
+    static const uint32_t depth = 32;
     uint32_t reservedMem[width * depth];
     uint32_t defaultDataSpace[depth];
     uint32_t defaultData[depth];
@@ -36,7 +36,7 @@ int main() {
     
     I2S_Tx i2sTx(reservedMem, defaultDataSpace, width, depth);
     printf("3\n");
-    i2sTx.init(2, 3, 1, 5000, 16);
+    i2sTx.init(2, 3, 1, 1000, 16);
     i2sTx.setDefaultData(defaultData);
     printf("4\n");
     i2sTx.enable(true);
@@ -55,17 +55,14 @@ int main() {
 
     uint32_t buff1[depth], buff2[depth];
 
-    for (uint i = 0; i < depth/2; i++) {
-        buff1[2*i] = 0x1010;
-        buff1[2*i+1] = 0x2222;
-        buff2[2*i] = 0xFFAA;
-        buff2[2*i+1] = 0xBBCC;
+    for (uint i = 0; i < depth; i++) {
+        buff1[i] = i;
     }
 
     bool pin13 = 1;
     while (1) {
         i2sTx.queueBuffer(buff1);
-        i2sTx.queueBuffer(buff2);
+        //i2sTx.queueBuffer(buff2);
         //sleep_us(1000);
     }
 }

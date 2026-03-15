@@ -8,15 +8,25 @@
 
 #include "RxPingPong.h"
 #include "TxPingPong.h"
+
 #include "I2S_Tx_naive.pio.h"
 #include "I2S_Tx_compact.pio.h"
+
 #include "I2S_Rx_naive.pio.h"
+#include "I2S_Rx_autoFrame.pio.h"
 
 #define I2S_TX_PROGRAM__NAIVE       0
 #define I2S_TX_PROGRAM__COMPACT     1
 
 #ifndef I2S_TX_PROGRAM
 #define I2S_TX_PROGRAM  I2S_TX_PROGRAM__NAIVE
+#endif
+
+#define I2S_RX_PROGRAM__NAIVE       0
+#define I2S_RX_PROGRAM__AUTOFRAME   1
+
+#ifndef I2S_RX_PROGRAM
+#define I2S_RX_PROGRAM  I2S_RX_PROGRAM__AUTOFRAME
 #endif
 
 
