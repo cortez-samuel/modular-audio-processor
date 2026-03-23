@@ -138,3 +138,8 @@ Noah McGlothlin :: 3/10/26 4:00pm - 5:00pm
 
 Noah McGlothlin :: 3/15/26 12:00am - 3:45am
   -- added autoraframe PIO to fix faulty data recieving when modules partially disconnected.
+
+Noah McGlothlin :: 3/22/26 11:00pm - 12:00am
+  -- got rotary encoder working, will try to make 'look' nice.
+  -- planned for button class (state-smachine on paper) with debounce 
+     logic similar to rotary encoders

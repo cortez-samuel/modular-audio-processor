@@ -32,7 +32,7 @@ include(pico_sdk_import.cmake)
 
 
 # name project the name of executable being run/tested
-project(module_FUNCTION C CXX ASM)
+project(RotaryEncoder_test C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -161,8 +161,24 @@ target_include_directories(SPI_master_pio_test PRIVATE
 )
 pico_add_extra_outputs(SPI_master_pio_test)
 
+########## ROTARY ENCODER ##########
+add_executable(RotaryEncoder_test
+    test/RotaryEncoder_test.cpp
+)
 
-if (1)
+pico_enable_stdio_uart(RotaryEncoder_test 0)
+pico_enable_stdio_usb(RotaryEncoder_test 1)
+
+target_link_libraries(RotaryEncoder_test
+    pico_stdlib
+)
+target_include_directories(RotaryEncoder_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+pico_add_extra_outputs(RotaryEncoder_test)
+
+
+if (0)
 
 ########## MAIN MASTER ##########
 add_executable(main_master
