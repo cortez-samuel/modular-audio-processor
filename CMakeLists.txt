@@ -32,7 +32,7 @@ include(pico_sdk_import.cmake)
 
 
 # name project the name of executable being run/tested
-project(RotaryEncoder_test C CXX ASM)
+project(PushButton_test C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -176,6 +176,22 @@ target_include_directories(RotaryEncoder_test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(RotaryEncoder_test)
+
+########## PUSH BUTTON ##########
+add_executable(PushButton_test
+    test/PushButton_test.cpp
+)
+
+pico_enable_stdio_uart(PushButton_test 0)
+pico_enable_stdio_usb(PushButton_test 1)
+
+target_link_libraries(PushButton_test
+    pico_stdlib
+)
+target_include_directories(PushButton_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+pico_add_extra_outputs(PushButton_test)
 
 
 if (0)
