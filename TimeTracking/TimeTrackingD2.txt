@@ -144,3 +144,7 @@ Noah McGlothlin :: 3/22/26 11:00pm - 12:00am 3/23/26 11:00am - 12:00pm
   -- planned for button class (state-smachine on paper) with debounce 
      logic similar to rotary encoders
   -- got button working and moved both into own classes. Should be easy to modify to fit needs if more appear.
+
+Noah McGlothlin :: 3/26/26 2:00am - 4:00am
+  -- Added callback support to RotaryEncoder + PushButton classes. Also made their naming 
+     conventions and attribute names more standard.

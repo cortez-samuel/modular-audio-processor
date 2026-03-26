@@ -9,28 +9,34 @@ struct PushButton {
 
     static inline PushButton* instances[32];
 
+public:
+    enum State_t {
+        UP,
+        DOWN
+    };
+    struct StateDetails_t {
+        uint64_t startTime_us;
+        uint64_t duration_us;
+        State_t state;
+    };
+
+private:
     uint _pin;
     
+    void (*onDownCallback)(PushButton*, State_t);
+    bool onDownCallbackEnabled;
+    void (*onUpCallback)(PushButton*, State_t);
+    bool onUpCallbackEnabled;
+
     uint64_t t0;
     bool bouncing;
-    enum State_t {
-        UP = 0,
-        DOWN
-    } state;
-
-    bool _press, _release;
-    uint _timeOfPress, _timeOfRelease;
+    State_t state;
 
 public:
     PushButton() {
         t0 = 0;
         bouncing = false;
         state = UP;
-
-        _press = false;
-        _timeOfPress = 0;
-        _release = false;
-        _timeOfRelease = 0;
     }
 
 public:
@@ -51,71 +57,56 @@ public:
         bouncing = (time_us_64() - t0) < BOUNCING_TIME_us;
         return bouncing;
     }
-    inline bool isDown() const {
-        return state == DOWN;
-    }
-    inline bool isUp() const {
-        return state == UP;
+
+    inline void setCallback(void (*callback)(PushButton*, State_t), bool isOnUpCallback, bool enabled) {
+        if (isOnUpCallback) {
+            onUpCallbackEnabled = enabled;
+            onUpCallback = callback;
+        }
+        else {
+            onDownCallbackEnabled = enabled;
+            onDownCallback = callback;
+        }
     }
 
-    inline bool wasPressed() {
-        bool ret = _press;
-        _press = false;
-        return ret;
+    inline State_t getState() const {
+        return state;
     }
-    inline uint getTimeOfLastPress() {
-        return _timeOfPress;
-    }
-    inline bool wasReleased() {
-        bool ret = _release;
-        _release = false;
-        return ret;
-    }
-    inline uint getTimeOfLastRelease() {
-        return _timeOfRelease;
+
+    inline StateDetails_t getStateDetails() const {
+        uint64_t duration = time_us_64() - t0;
+        return {
+            t0,
+            duration,
+            state
+        };
     }
 
 public:
     void onDown() {
         state = DOWN;
-        _press = true;
-        _timeOfPress = time_us_32();
-    }
-    void onDown_bouncing() {
-        uint64_t now = time_us_64();
-
-        if (!isBouncing() && state == UP) {
-            onDown();
-            t0 = now;
-            bouncing = true;
-        }
     }
 
     void onUp() {
         state = UP;
-        _release = true;
-        _timeOfRelease = time_us_32();
-    }
-    void onUp_bouncing() {
-        uint64_t now = time_us_64();
-
-        if (!isBouncing() && state == DOWN) {
-            onUp();
-            t0 = now;
-            bouncing = true;
-        }
     }
 
 public:
     void __time_critical_func(_GPIOIRQ)(uint gpio, uint32_t event_mask) {
-        if (event_mask & GPIO_IRQ_EDGE_RISE) {
-            onDown_bouncing();
+        if (!isBouncing()) {
+            if (event_mask & GPIO_IRQ_EDGE_RISE) {
+                if (onDownCallbackEnabled) onDownCallback(this, DOWN);
+                onDown();
+            }
+            else if (event_mask & GPIO_IRQ_EDGE_FALL) {
+                if (onUpCallbackEnabled) onUpCallback(this, UP);
+                onUp();
+            }
+            t0 = time_us_64();
+            bouncing = true;
         }
-        else if (event_mask & GPIO_IRQ_EDGE_FALL) {
-            onUp_bouncing();
-        }
+
         gpio_acknowledge_irq(gpio, event_mask);
-        return;
     }
     static void __time_critical_func(_clsGPIOIRQ)(uint gpio, uint32_t event_mask) {
         PushButton* instance = instances[gpio];
