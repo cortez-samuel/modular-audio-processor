@@ -3,6 +3,8 @@
 
 #include "pico/stdlib.h"
 
+#include "GPIO_IRQManager.hpp"
+
 template<uint64_t BOUNCING_TIME>
 class RotaryEncoder {
     static const uint64_t BOUNCING_TIME_us = BOUNCING_TIME;
@@ -70,10 +72,10 @@ public:
         gpio_set_dir(pinA, 0);
         gpio_set_dir(pinB, 0);
 
-        gpio_set_irq_enabled_with_callback(pinA, GPIO_IRQ_EDGE_RISE, true, _clsGPIOIRQ);
-
         instances[pinA] = this;
         instances[pinB] = this;
+
+        GPIO_IRQManager::setIRQCallback(pinA, GPIO_IRQ_EDGE_RISE, _clsGPIOIRQ, true);
     }
 
 public:
@@ -133,6 +135,9 @@ private:
     }
     static void __time_critical_func(_clsGPIOIRQ)(uint gpio, uint32_t event_mask) {
         RotaryEncoder* instance = instances[gpio];
+        if (instance == nullptr) {
+            return;
+        }
         instance->_GPIOIRQ(gpio, event_mask);
     }
 };

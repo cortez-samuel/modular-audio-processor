@@ -1,6 +1,8 @@
 #include "pico/stdlib.h"
 
 #include "../libraries/PushButton.hpp"
+#include "../libraries/RotaryEncoder.hpp"
+#include "../libraries/GPIO_IRQManager.hpp"
 
 #include <cstdio>
 
@@ -19,13 +21,24 @@ void callback(PushButton<10000>* inst, PushButton<10000>::State_t next) {
     }
 }
 
+void encCallback(RotaryEncoder<10000>* inst, RotaryEncoder<10000>::State_t next) {
+    printf("rotated\t pos: %i\n", next);
+}
+
 int main() {
     stdio_init_all();
-    
+
+    GPIO_IRQManager::init();
+
+        RotaryEncoder<10000> inst;
+    inst.setCallback(encCallback, false, true);
+    inst.setCallback(encCallback, true, true);
     PushButton<10000> pushButton;
     pushButton.setCallback(callback, false, true);
     pushButton.setCallback(callback, true, true);
-    pushButton.begin(0);
+    pushButton.begin(12);
+        inst.begin(1,6);
+
 
     uint timesPressed = 0;
 

@@ -3,6 +3,8 @@
 
 #include "pico/stdlib.h"
 
+#include "GPIO_IRQManager.hpp"
+
 template<uint64_t BOUNCING_TIME>
 struct PushButton {
     static const uint64_t BOUNCING_TIME_us = BOUNCING_TIME;
@@ -47,9 +49,10 @@ public:
         
         gpio_set_dir(pin, GPIO_IN);
 
-        gpio_set_irq_enabled_with_callback(pin, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, _clsGPIOIRQ);
-
         instances[pin] = this;
+
+        const uint32_t event_mask = GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE;
+        GPIO_IRQManager::setIRQCallback(pin, event_mask, _clsGPIOIRQ, true);
     }
 
 public:

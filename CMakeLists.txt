@@ -32,7 +32,7 @@ include(pico_sdk_import.cmake)
 
 
 # name project the name of executable being run/tested
-project(PushButton_test C CXX ASM)
+project(module_FUNCTION C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -194,7 +194,7 @@ target_include_directories(PushButton_test PRIVATE
 pico_add_extra_outputs(PushButton_test)
 
 
-if (0)
+if (1)
 
 ########## MAIN MASTER ##########
 add_executable(main_master
