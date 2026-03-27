@@ -145,6 +145,9 @@ Noah McGlothlin :: 3/22/26 11:00pm - 12:00am 3/23/26 11:00am - 12:00pm
      logic similar to rotary encoders
   -- got button working and moved both into own classes. Should be easy to modify to fit needs if more appear.
 
-Noah McGlothlin :: 3/26/26 2:00am - 4:00am
+Noah McGlothlin :: 3/26/26 2:00am - 4:00am 3/27/2026 9:00am - 12:30pm
   -- Added callback support to RotaryEncoder + PushButton classes. Also made their naming 
      conventions and attribute names more standard.
+  -- Added support for multiple GPIO IRQs
+  -- Implemented RotaryEncoder and PushButton in module_FUNCTION file
+  -- -- still sometimes bounces, seemed to be primarily because of bad connections though
