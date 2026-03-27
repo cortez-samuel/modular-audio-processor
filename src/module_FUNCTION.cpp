@@ -1,13 +1,17 @@
 #include "pico/stdlib.h"
+
 #include "hardware/pio.h"
 #include "hardware/dma.h"
 #include "hardware/irq.h"
 #include "pico/multicore.h"
 #include "pico/util/queue.h"
+
 #include "../libraries/I2S.h"
 #include "../libraries/oled.h"
 #include "../libraries/adc.hpp"
 #include "../libraries/fft.hpp"
+#include "../libraries/PushButton.hpp"
+#include "../libraries/RotaryEncoder.hpp"
 
     // LED PIN
 static const uint LED_PIN           = 13;
@@ -50,17 +54,9 @@ static uint32_t Rx_reservedMem[Rx_reservedMemDepth * RxPingPong::WIDTH];
 static const uint  I2S_WS_FRAME_WIDTH = 16;
 static const float fs                 = 44100;
 
-    // ADC / USER INPUT
-static const uint8_t ALPHA_ADC_CHANNEL     = 0;
-static const uint8_t PIN_ALPHA_ADC_CHANNEL = ADC_GET_CHANNEL_PIN(ALPHA_ADC_CHANNEL);
-static const uint8_t CHANGE_MODE           = 12;
-static const int     ALPHA_AVG_WINDOW      = 16;
-static float alphaBuffer[ALPHA_AVG_WINDOW] = {0};
-int alphaIndex = 0;
-
     // FILTERS
 static float volatile alpha          = 0.0f;
-static float alphaMin                = 0.033f;
+static float alphaMin                = 0.0f;
 static float alphaMax                = 1.0f;
 static float (*currentFilter)(float) = nullptr;
 static float filterOutput            = 0.0f;
@@ -68,28 +64,60 @@ static float Pass(float x);
 static float LowPass(float x);
 static float HighPass(float x);
 
-enum class Mode { Pass, Lowpass, Highpass, FFT };
+enum class Mode { 
+    Pass, 
+    Lowpass, 
+    Highpass, 
+    FFT 
+};
 static Mode mode = Mode::Pass;
-static const float _E_SCALE = 32768.0f;
 
+    // PUSH BUTTON
+static const uint8_t PIN_PUSH_BUTTON_CHANGEMODE     = 12;
+static const uint64_t PUSH_BUTTON_DEBOUNCE_TIME_us  = 20000;
+
+    // ROTARY ENCODER
+static const uint8_t PIN_ROTARY_ENCODER_A               = 1;
+static const uint8_t PIN_ROTARY_ENCODER_B               = 6;
+static const uint64_t ROTARY_ENCODER_DEBOUNCE_TIME_us   = 1000;
+static const uint8_t ROTARY_ENCODER_MIN_POSITION        = 0;
+static const uint8_t ROTARY_ENCODER_MAX_POSITION        = 100;
+
+
+    //  FIXEDPOINT CONVERSIONS
+static const float _E_SCALE = 32768.0f;
 static inline float fix_to_float(int16_t x) {
     return (float)x / _E_SCALE;
 }
-
-// float in [-1, 1)  ->  int16_t  (saturating)
+        // float in [-1, 1)  ->  int16_t  (saturating)
 static inline int16_t float_to_fix(float x) {
     if (x >=  1.0f) return  0x7FFF;
     if (x <= -1.0f) return (int16_t)0x8000;
     return (int16_t)(x * 32767.0f);
 }
 
+    // HELPER FUNCTIONS
 static inline float clamp_f(float lo, float x, float hi) {
     return x < lo ? lo : (x > hi ? hi : x);
 }
 
+    // CALLBACKS
+static void changeModeCallback(PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>* pushButton, PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>::State_t next) {
+    printf("PUSH BUTTON IRQ CALLED\n");
+    switch (mode) {
+                    case Mode::Pass: mode = Mode::Lowpass;  currentFilter = LowPass; break;
+                    case Mode::Lowpass: mode = Mode::Highpass; currentFilter = HighPass; break;
+                    case Mode::Highpass: mode = Mode::FFT; currentFilter = Pass; break;
+                    case Mode::FFT: mode = Mode::Pass; currentFilter = Pass; break;
+                }
+}
+static inline void rotaryEncoderCallback(RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us>* inst, RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us>::State_t next) {
+    printf("ROTARY ENCODER CALLBACK CALLED\n");
+}
+
 // CORE 1 (OLED DISPLAY) MAIN
 void core1_entry() {
-    // Initialize OLED
+        // Initialize OLED
     gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
     gpio_set_function(PIN_TX,  GPIO_FUNC_SPI);
     OLED oled(SPI_INSTANCE, PIN_CS, PIN_DC, PIN_RST, 128, 64);
@@ -101,7 +129,7 @@ void core1_entry() {
         }
     }
 
-    // Startup splash
+        // Startup splash
     oled.clearDisplay();
     oled.setCursor(10, 5);
     oled.setTextSize(2);
@@ -110,7 +138,18 @@ void core1_entry() {
     oled.display();
     sleep_ms(2000);
 
-    // Circular buffer – stores int16_t bit-patterns in the low 16 bits of uint32_t.
+        // PushButton init
+    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us> changeModePushButton;
+    changeModePushButton.setCallback(changeModeCallback, false, true);
+    changeModePushButton.begin(PIN_PUSH_BUTTON_CHANGEMODE);
+
+        // Rotary Encoder init
+    RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us> alphaRotaryEncoder;
+    alphaRotaryEncoder.setCallback(rotaryEncoderCallback, false, true);
+    alphaRotaryEncoder.setCallback(rotaryEncoderCallback, true, true);
+    alphaRotaryEncoder.begin(PIN_ROTARY_ENCODER_A, PIN_ROTARY_ENCODER_B);
+
+        // Circular buffer – stores int16_t bit-patterns in the low 16 bits of uint32_t.
     static const int CIRCULAR_BUFFER_SIZE = 512;
     uint32_t circularBuffer[CIRCULAR_BUFFER_SIZE] = {0};
     int bufferWriteIndex = 0;
@@ -119,7 +158,20 @@ void core1_entry() {
     const uint32_t DISPLAY_INTERVAL_MS = 33; // ~30 fps
 
     while (true) {
-        // Drain the inter-core queue
+            // check alphaRotaryEncoder position
+        int alphaRotaryEncoderPosition = alphaRotaryEncoder.getState();
+        if (alphaRotaryEncoderPosition > ROTARY_ENCODER_MAX_POSITION) {
+            alphaRotaryEncoderPosition = ROTARY_ENCODER_MAX_POSITION;
+            alphaRotaryEncoder.setState(ROTARY_ENCODER_MAX_POSITION);
+        }
+        if (alphaRotaryEncoderPosition < ROTARY_ENCODER_MIN_POSITION) {
+            alphaRotaryEncoderPosition = ROTARY_ENCODER_MIN_POSITION;
+            alphaRotaryEncoder.setState(ROTARY_ENCODER_MIN_POSITION);
+        }
+
+        alpha = alphaRotaryEncoderPosition/100.0f;
+
+            // Drain the inter-core queue
         uint32_t word;
         while (queue_try_remove(&sharedQueue, &word)) {
             circularBuffer[bufferWriteIndex] = word;
@@ -230,11 +282,6 @@ int main() {
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
-    // Mode-change push button
-    gpio_init(CHANGE_MODE);
-    gpio_set_dir(CHANGE_MODE, GPIO_IN);
-    gpio_pull_down(CHANGE_MODE);
-
     // Inter-core queue: element = uint32_t holding an int16_t bit-pattern.
     queue_init(&sharedQueue, sizeof(uint32_t), 256);
 
@@ -250,42 +297,13 @@ int main() {
     i2sTx.enable(true);
     i2sRx.enable(true);
 
-    // Alpha-control ADC init
-    ADC::init(10, true, false, 1, defaultADCRIQHandler);
-    ADC::enableChannel(ALPHA_ADC_CHANNEL, true);
-    ADC::setActiveChannel(ALPHA_ADC_CHANNEL);
-    ADC::enableIRQ(true);
-    ADC& adc0 = ADC::getActiveChannel();
-
-    gpio_init(6);
-    gpio_set_dir(6, GPIO_IN);
-    gpio_pull_down(6);
+    // initialize filter
     currentFilter = Pass;
     mode = Mode::Pass;
 
-    ADC::run(true);
     uint32_t downsampleCounter = 0;
 
-    while (true) {
-        /*
-        static bool lastButtonState = false;
-        static uint32_t lastDebounceTime = 0;
-        const uint32_t DEBOUNCE_MS = 150;
-        bool buttonState = gpio_get(CHANGE_MODE);
-        uint32_t now = time_us_32() / 1000;
-        if (buttonState && !lastButtonState) {
-            if (now - lastDebounceTime > DEBOUNCE_MS) {
-                lastDebounceTime = now;
-                switch (mode) {
-                    case Mode::Pass: mode = Mode::Lowpass;  currentFilter = LowPass; break;
-                    case Mode::Lowpass: mode = Mode::Highpass; currentFilter = HighPass; break;
-                    case Mode::Highpass: mode = Mode::FFT; currentFilter = Pass; break;
-                    case Mode::FFT: mode = Mode::Pass; currentFilter = Pass; break;
-                }
-            }
-        }
-        lastButtonState = buttonState;
-        */
+    while (true) {    
         /*
         if (adc0.newValue()) alpha = clamp_f(alphaMin, adc0.trueValue() / 3.3f, alphaMax);
         if (alpha == alphaMin) alpha = 0.0f;
