@@ -3,6 +3,8 @@
 
 #include "pico/stdlib.h"
 
+#include <cstdio>
+
 class GPIO_IRQManager {
     static const uint PIN_COUNT = 32;
     static inline gpio_irq_callback_t pins[PIN_COUNT];
@@ -11,6 +13,7 @@ class GPIO_IRQManager {
         gpio_acknowledge_irq(gpio, event_mask);
     }
     static void __time_critical_func(_IRQ)(uint gpio, uint32_t event_mask) {
+        printf("gpio: %u\n", gpio);
         gpio_irq_callback_t irqCallback = pins[gpio];
         irqCallback(gpio, event_mask);
     }

@@ -138,6 +138,8 @@ void core1_entry() {
     oled.display();
     sleep_ms(2000);
 
+
+    GPIO_IRQManager::init();
         // PushButton init
     PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us> changeModePushButton;
     changeModePushButton.setCallback(changeModeCallback, false, true);

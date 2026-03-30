@@ -94,7 +94,7 @@ public:
         _queued = _popBufferArray(_filled);
         if (_queued == nullptr) {
             // underflow
-            printf("underflow %u\n", ch);
+            //printf("underflow %u\n", ch);
             _queued = _defaultDataSpace;
             _underflow = true;
         }
