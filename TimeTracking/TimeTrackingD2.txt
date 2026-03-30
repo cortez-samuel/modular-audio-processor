@@ -135,3 +135,19 @@ Noah McGlothlin :: 3/10/26 4:00pm - 5:00pm
   -- -- currently averages LC and RC data from the rxBuffer, filters said average, 
         then queues on both LC and RC channels for i2sTx. Can change to filtering 
         LC and RC separately, but needs improved filter logic.
+
+Noah McGlothlin :: 3/15/26 12:00am - 3:45am
+  -- added autoraframe PIO to fix faulty data recieving when modules partially disconnected.
+
+Noah McGlothlin :: 3/22/26 11:00pm - 12:00am 3/23/26 11:00am - 12:00pm
+  -- got rotary encoder working, will try to make 'look' nice.
+  -- planned for button class (state-smachine on paper) with debounce 
+     logic similar to rotary encoders
+  -- got button working and moved both into own classes. Should be easy to modify to fit needs if more appear.
+
+Noah McGlothlin :: 3/26/26 2:00am - 4:00am 3/27/2026 9:00am - 12:30pm
+  -- Added callback support to RotaryEncoder + PushButton classes. Also made their naming 
+     conventions and attribute names more standard.
+  -- Added support for multiple GPIO IRQs
+  -- Implemented RotaryEncoder and PushButton in module_FUNCTION file
+  -- -- still sometimes bounces, seemed to be primarily because of bad connections though

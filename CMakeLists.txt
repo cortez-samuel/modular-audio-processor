@@ -126,6 +126,7 @@ add_executable(I2S_Rx_test
     libraries/RxPingPong.cpp
 )
 pico_generate_pio_header(I2S_Rx_test ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Rx_naive.pio)
+pico_generate_pio_header(I2S_Rx_test ${CMAKE_CURRENT_LIST_DIR}/libraries/PIO/I2S_Rx_autoFrame.pio)
 
 pico_enable_stdio_uart(I2S_Rx_test 0)
 pico_enable_stdio_usb(I2S_Rx_test 1)
@@ -159,6 +160,38 @@ target_include_directories(SPI_master_pio_test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(SPI_master_pio_test)
+
+########## ROTARY ENCODER ##########
+add_executable(RotaryEncoder_test
+    test/RotaryEncoder_test.cpp
+)
+
+pico_enable_stdio_uart(RotaryEncoder_test 0)
+pico_enable_stdio_usb(RotaryEncoder_test 1)
+
+target_link_libraries(RotaryEncoder_test
+    pico_stdlib
+)
+target_include_directories(RotaryEncoder_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+pico_add_extra_outputs(RotaryEncoder_test)
+
+########## PUSH BUTTON ##########
+add_executable(PushButton_test
+    test/PushButton_test.cpp
+)
+
+pico_enable_stdio_uart(PushButton_test 0)
+pico_enable_stdio_usb(PushButton_test 1)
+
+target_link_libraries(PushButton_test
+    pico_stdlib
+)
+target_include_directories(PushButton_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+pico_add_extra_outputs(PushButton_test)
 
 
 if (1)

@@ -1,5 +1,7 @@
 #include "../libraries/I2S_Rx_naive.pio.h"
 
+#define I2S_RX_PROGRAM I2S_RX_PROGRAM__AUTOFRAME
+
 #include "hardware/pio.h"
 #include "hardware/irq.h"
 
@@ -185,65 +187,10 @@ int main() {
     gpio_init(pin13);
     gpio_set_dir(pin13, GPIO_OUT);
 
-    uint8_t depth = 64;
-    uint32_t reserved[RxPingPong::WIDTH * 64];
+    static const uint8_t depth = 8;
+    uint32_t reserved[RxPingPong::WIDTH * depth];
     I2S_Rx i2sRx(reserved, depth);
 
-    //set_sys_clock_48mhz();    
-
-    /*
-    PIO pio;
-    uint sm;
-    uint offset;
-    pio_claim_free_sm_and_add_program(&I2S_Rx_naive_program, &pio, &sm, &offset);
-    I2S_Rx_naive_init(pio, sm, offset, 2, 3, 1, 1000, 12);
-
-    uint32_t DEPTH = 64;
-    uint32_t reserved[RxPingPong::WIDTH * 64];
-    RxPingPong ppb(reserved, DEPTH);
-    ppb.begin(pio, sm);
-    uint32_t ppb_aligned = alignof(RxPingPong);
-
-    //pingpong.begin(pio, sm);
-    */
-    /*
-    ch1 = dma_claim_unused_channel(true);
-    ch2 = dma_claim_unused_channel(true);
-    dma_channel_config_t c;
-        c = dma_channel_get_default_config(ch1);
-            channel_config_set_transfer_data_size(&c, DMA_SIZE_32);
-            channel_config_set_read_increment(&c, false);
-            channel_config_set_write_increment(&c, true);
-            channel_config_set_dreq(&c, pio_get_dreq(pio, sm, false));
-            channel_config_set_chain_to(&c, ch2);
-            channel_config_set_irq_quiet(&c, false);
-            dma_channel_configure(ch1, &c,
-                buffer,
-                &pio->rxf[sm],
-                128,
-                false
-            );
-                // config irq
-            dma_irqn_set_channel_enabled(0, ch1, true);
-        c = dma_channel_get_default_config(ch2);
-            channel_config_set_transfer_data_size(&c, DMA_SIZE_32);
-            channel_config_set_read_increment(&c, false);
-            channel_config_set_write_increment(&c, true);
-            channel_config_set_dreq(&c, pio_get_dreq(pio, sm, false));
-            channel_config_set_chain_to(&c, ch1);
-            channel_config_set_irq_quiet(&c, false);
-            dma_channel_configure(ch2, &c,
-                buffer,
-                &pio->rxf[sm],
-                128,
-                false
-            );
-                // config irq
-            dma_irqn_set_channel_enabled(0, ch2, true);
-    
-        irq_set_exclusive_handler(DMA_IRQ_NUM(0), tempIRQ);
-        irq_set_enabled(DMA_IRQ_NUM(0), true);
-    */
 
     i2sRx.init(8, 9, 7, 50000, 16);
 
@@ -261,22 +208,19 @@ int main() {
     i2sRx.enable(true);
 
 
-    //uint32_t buff[PPB::DEPTH];
-    uint32_t LC = 0;
-    uint32_t RC = 0;
-    stdio_printf("enabled called\n");
-    uint i = 0;
+    uint32_t buff[depth];
     while(1) {
         //stdio_printf("%u\n", i++);
         //bool valid = ppb.read(buff);
         //I2S_Rx_naive_read(i2sRx.pio, i2sRx.sm, &LC, &RC);
         //bool valid = true;
-        bool valid = i2sRx.read(LC, RC);
+        bool valid = i2sRx.readBuffer(buff);
 
         if (valid) {
-            printf("0x%02x 0x%02x\n", LC, RC);
+            printf("----- %u\n", i2sRx.getOverflow());
+            for (uint i = 0; i < depth/2; i++) {
+                printf("LC 0x%02x  RC 0x%02x\n", buff[2*i], buff[2*i+1]);
+            }
         }
-
-        sleep_ms(2);
     }
 }   

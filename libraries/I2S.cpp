@@ -38,11 +38,19 @@ void I2S_Tx::enable(bool start) {
 
 I2S_Rx::I2S_Rx() :
         rxPingPong() {
-    pio_claim_free_sm_and_add_program(&I2S_Rx_naive_program, &pio, &sm, &offset);
+    #if     I2S_RX_PROGRAM == I2S_RX_PROGRAM__NAIVE
+        pio_claim_free_sm_and_add_program(&I2S_Rx_naive_program, &pio, &sm, &offset);
+    #elif   I2S_RX_PROGRAM == I2S_RX_PROGRAM__AUTOFRAME
+        pio_claim_free_sm_and_add_program(&I2S_Rx_autoFrame_program, &pio, &sm, &offset);
+    #endif
 }
 I2S_Rx::I2S_Rx(uint32_t* reserved, uint8_t depth) : 
         rxPingPong(reserved, depth) {
-    pio_claim_free_sm_and_add_program(&I2S_Rx_naive_program, &pio, &sm, &offset);
+    #if     I2S_RX_PROGRAM == I2S_RX_PROGRAM__NAIVE
+        pio_claim_free_sm_and_add_program(&I2S_Rx_naive_program, &pio, &sm, &offset);
+    #elif   I2S_RX_PROGRAM == I2S_RX_PROGRAM__AUTOFRAME
+        pio_claim_free_sm_and_add_program(&I2S_Rx_autoFrame_program, &pio, &sm, &offset);
+    #endif
 }
 
 void I2S_Rx::setReservedMem(uint32_t* reservedMem, uint8_t depth) {
@@ -50,7 +58,11 @@ void I2S_Rx::setReservedMem(uint32_t* reservedMem, uint8_t depth) {
 }
 
 bool I2S_Rx::init(uint BCLK_pin, uint WS_pin, uint SD_pin, float fs, uint WS_frame_size) {
-    I2S_Rx_naive_init(pio, sm, offset, BCLK_pin, WS_pin, SD_pin, fs, WS_frame_size);
+    #if     I2S_RX_PROGRAM == I2S_RX_PROGRAM__NAIVE
+        I2S_Rx_naive_init(pio, sm, offset, BCLK_pin, WS_pin, SD_pin, fs, WS_frame_size);
+    #elif   I2S_RX_PROGRAM == I2S_RX_PROGRAM__AUTOFRAME
+        I2S_Rx_autoFrame_init(pio, sm, offset, BCLK_pin, WS_pin, SD_pin, fs, WS_frame_size);
+    #endif
 
     return true;
 }
