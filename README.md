@@ -1,3 +1,54 @@
+# Modular Audio Processor (Release Candidate)
+
+## Overview
+In the Release Candidate version of the Modular Audio Processor, the system consists of a dedicated input and one or more functions that connect via POGO pins. The system supports real-time DSP filtering and live FFT visualization, with all settings capable of being stored in flash memory. The Release Candidate represents a mostly polished build, as all planned features are integrated, the casings are complete, and usability has been refined based on feedback from our beta testing phase.
+
+## Completed Work
+
+### Hardware and Physical Design
+- Designed and constructed dedicated input and function module casings (3D-printed and assembled).
+- Input Module now uses a 3.5mm headphone jack for analog audio input instead of the DAD board's Waveform Generator.
+- Function Modules output processed audio through a dedicated DAC with a 3.5mm headphone jack.
+- System power is supplied using a USB-C breakout board (no direct connection to RP2040 USB-C port).
+- User controls now use a rotary encoder instead of a potentiometer for intuitive control. Turning it adjusts the filter parameter alpha and pressing it changes the current DSP mode.
+- Another button was added to allow the user to save these settings to flash memory, allowing the configuration to persist even after the system loses power.
+
+### Intermodular Communication
+- Full I2S-based communication using the RP2040 PIO for stereo-aligned, low-latency audio at 44.1 kHz
+- We're still using dual-core optimization, with Core 0 handling the real-time audio pipeline (I2S RX -> DSP -> I2S TX) and Core 1 handling the OLED display logic.
+- Added clock-forward PIO program to maintain clean BCLK/WS synchronization across chained modules.
+
+### DSP Features
+- The system now uses fixed-point arithmetic throughout for low latency and highly precise processing.
+- Downsampled waveform/FFT data streamed to the display without impacting audio performance.
+
+## Project Architecture
+
+### Module Types
+- **Input Module**: Reads analog audio from the 3.5mm headphone jack via the RP2040 ADC, performs fixed-point conversion, and transmits stereo I2S audio at 44.1 kHz frequency over POGO pins.
+- **Function Module**: Receives I2S audio via POGO pins, applies the selected filter or FFT, and forwards the processed audio via I2S TX. It also handles user input (rotary encoder + mode button), flash persistence, and OLED display.
+
+### Core Allocation
+- **Core 0** (audio/DSP): I2S RX -> selectable filter or FFT -> I2S Tx. Uses DMA ping-pong buffers for zero-copy, real-time operation. It includes downsampling for display data.
+- **Core 1** (OLED Display): Drives the 128 by 64 SSD1306 OLED display, renders either a live oscilloscope-style waveform display or FFT bar graph, and displays current mode and alpha value.
+
+### State & Persistence
+- Mode and alpha are stored in the last flash sector using a magic-byte header.
+- `loadMode()` and `saveMode()` run at boot and on every user change.
+- Flash writes are performed safely with `flash_safe_execute` to avoid XIP conflicts.
+
+### Inter-Module Communication
+- I2S bus (BCLK, WS, SD) carried over POGO pins.
+- Dedicated PIO program forwards the clock signals to maintain synchronization in long chains.
+- Power and ground are also passed through the POGO connectors.
+
+## Known Bugs
+- If the user partially disconnects the modules in such a manner that the POGO pins transmitting the I2S signals are detached but VCC and GND are stil connected, once the user fully reconnects the modules, it messes up the audio signal. This is caused by the PIO using autopull. However, this would be something that the user would need to delibrately do and isn't an issue that would usually come up in normal use.
+- There are rare DMA underflow events that print a debug message to UART during extreme buffer starvation (though this is never audible in normal use and is automatically recovered by inserting default data).
+- In this version, there are no major bugs, crashes, or loss of functionality. The edge cases (power-cycle, rapidly changing modes, alpha = 0, and buffer overflow/underflow) are handled properly.
+
+---
+
 # Modular Audio Processor (Beta Build)
 
 ## Completed Work
