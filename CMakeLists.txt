@@ -194,7 +194,7 @@ target_include_directories(PushButton_test PRIVATE
 pico_add_extra_outputs(PushButton_test)
 
 
-if (1)
+if (0)
 
 ########## MAIN MASTER ##########
 add_executable(main_master
@@ -250,6 +250,8 @@ target_include_directories(module_INPUT PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(module_INPUT)
+
+endif()
 
 ### AUDIO DSP MODULE ###
 add_executable(module_FUNCTION
@@ -308,5 +310,3 @@ target_include_directories(module_OUTPUT PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(module_OUTPUT)
-
-endif()

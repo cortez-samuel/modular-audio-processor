@@ -2,6 +2,7 @@
 
 #include "hardware/irq.h"
 
+/*
 
 // OBJECT STUFF
 ADC::ADC(uint8_t channel, bool enabled): m_value(0), m_channel(channel), m_newValue(false), m_enabled(enabled) {
@@ -146,3 +147,5 @@ void defaultADCRIQHandler() {
     //gpio_put(13, pin13);
     //pin13 = !pin13;
 }
+
+*/
