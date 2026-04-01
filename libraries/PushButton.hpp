@@ -39,6 +39,11 @@ public:
         t0 = 0;
         bouncing = false;
         state = UP;
+
+        onDownCallback = nullptr;
+        onDownCallbackEnabled = false;
+        onUpCallback = nullptr;
+        onUpCallbackEnabled = false;
     }
 
 public:
@@ -86,23 +91,27 @@ public:
     }
 
 public:
-    void onDown() {
+    inline void onDown() {
         state = DOWN;
     }
 
-    void onUp() {
+    inline void onUp() {
         state = UP;
     }
 
 public:
     void __time_critical_func(_GPIOIRQ)(uint gpio, uint32_t event_mask) {
         if (!isBouncing()) {
-            if (event_mask & GPIO_IRQ_EDGE_RISE) {
-                if (onDownCallbackEnabled) onDownCallback(this, DOWN);
+            if ((event_mask & GPIO_IRQ_EDGE_RISE) && state == UP) {    // push button pressed
+                if (onDownCallbackEnabled && (onDownCallback != nullptr)) { 
+                    onDownCallback(this, DOWN); 
+                }
                 onDown();
             }
-            else if (event_mask & GPIO_IRQ_EDGE_FALL) {
-                if (onUpCallbackEnabled) onUpCallback(this, UP);
+            else if ((event_mask & GPIO_IRQ_EDGE_FALL) && state == DOWN) { // push button released
+                if (onUpCallbackEnabled && (onUpCallback != nullptr)) { 
+                    onUpCallback(this, UP); 
+                }
                 onUp();
             }
             t0 = time_us_64();
@@ -112,7 +121,11 @@ public:
         gpio_acknowledge_irq(gpio, event_mask);
     }
     static void __time_critical_func(_clsGPIOIRQ)(uint gpio, uint32_t event_mask) {
+        //printf("\t PUSHBUTTONCLS: %u -- %02x\n", gpio, event_mask);
         PushButton* instance = instances[gpio];
+        if (instance == nullptr) {
+            return;
+        }
         instance->_GPIOIRQ(gpio, event_mask);
     }
 };

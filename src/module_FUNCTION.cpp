@@ -74,12 +74,12 @@ static Mode mode = Mode::Pass;
 
     // PUSH BUTTON
 static const uint8_t PIN_PUSH_BUTTON_CHANGEMODE     = 12;
-static const uint64_t PUSH_BUTTON_DEBOUNCE_TIME_us  = 20000;
+static const uint64_t PUSH_BUTTON_DEBOUNCE_TIME_us  = 50000;
 
     // ROTARY ENCODER
 static const uint8_t PIN_ROTARY_ENCODER_A               = 1;
 static const uint8_t PIN_ROTARY_ENCODER_B               = 6;
-static const uint64_t ROTARY_ENCODER_DEBOUNCE_TIME_us   = 1000;
+static const uint64_t ROTARY_ENCODER_DEBOUNCE_TIME_us   = 10000;
 static const uint8_t ROTARY_ENCODER_MIN_POSITION        = 0;
 static const uint8_t ROTARY_ENCODER_MAX_POSITION        = 100;
 
@@ -155,7 +155,7 @@ void core1_entry() {
     static const int CIRCULAR_BUFFER_SIZE = 512;
     uint32_t circularBuffer[CIRCULAR_BUFFER_SIZE] = {0};
     int bufferWriteIndex = 0;
-
+    
     uint32_t lastDisplayTime = 0;
     const uint32_t DISPLAY_INTERVAL_MS = 33; // ~30 fps
 
