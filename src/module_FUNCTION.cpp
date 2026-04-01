@@ -29,26 +29,26 @@ static const uint8_t PIN_CS         = 24;
 static volatile uint8_t DOWNSAMPLE_FACTOR   = 16;
 static const uint8_t    SHARED_BUFFER_WIDTH = 64;
 static const uint8_t    SHARED_BUFFER_DEPTH = 128;
-// store int16_t bit pattern in the low 16 bits.
 static queue_t sharedQueue;
 
-    // I2S TX
-static const uint8_t PIN_I2S_Tx_SD   = 0;
+    // I2S Tx
+static const uint8_t PIN_I2S_Tx_SD = 0;
 static const uint8_t PIN_I2S_Tx_BCLK = 2;
-static const uint8_t PIN_I2S_Tx_WS   = 3;
+static const uint8_t PIN_I2S_Tx_WS = 3;
 static I2S_Tx i2sTx;
 static const uint32_t Tx_reservedMemDepth = 128;
-static const uint32_t Tx_reservedMemWidth = 32;
+static const uint32_t Tx_reservedMemWidth = 8;
 static uint32_t Tx_reservedMem[Tx_reservedMemDepth * Tx_reservedMemWidth];
 static uint32_t Tx_defaultMem[Tx_reservedMemDepth];
 
-    // I2S RX
+    // I2S Rx
 static const uint8_t PIN_I2S_Rx_SD   = 7;
 static const uint8_t PIN_I2S_Rx_BCLK = 8;
 static const uint8_t PIN_I2S_Rx_WS   = 9;
 static I2S_Rx i2sRx;
 static const uint32_t Rx_reservedMemDepth = 128;
 static uint32_t Rx_reservedMem[Rx_reservedMemDepth * RxPingPong::WIDTH];
+
 
     // I2S GENERAL
 static const uint  I2S_WS_FRAME_WIDTH = 16;
@@ -103,7 +103,7 @@ static inline float clamp_f(float lo, float x, float hi) {
 
     // CALLBACKS
 static void changeModeCallback(PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>* pushButton, PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>::State_t next) {
-    printf("PUSH BUTTON IRQ CALLED\n");
+    //printf("PUSH BUTTON IRQ CALLED\n");
     switch (mode) {
                     case Mode::Pass: mode = Mode::Lowpass;  currentFilter = LowPass; break;
                     case Mode::Lowpass: mode = Mode::Highpass; currentFilter = HighPass; break;
@@ -122,7 +122,7 @@ void core1_entry() {
     gpio_set_function(PIN_TX,  GPIO_FUNC_SPI);
     OLED oled(SPI_INSTANCE, PIN_CS, PIN_DC, PIN_RST, 128, 64);
     sleep_ms(500);
-    if (!oled.begin(10 * 1000 * 1000)) {
+    if(!oled.begin(10 * 1000 * 1000)){
         while (true) {
             gpio_put(LED_PIN, 1); sleep_ms(500);
             gpio_put(LED_PIN, 0); sleep_ms(500);
@@ -147,15 +147,14 @@ void core1_entry() {
 
         // Rotary Encoder init
     RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us> alphaRotaryEncoder;
-    alphaRotaryEncoder.setCallback(rotaryEncoderCallback, false, true);
-    alphaRotaryEncoder.setCallback(rotaryEncoderCallback, true, true);
+    //alphaRotaryEncoder.setCallback(rotaryEncoderCallback, false, true);
+    //alphaRotaryEncoder.setCallback(rotaryEncoderCallback, true, true);
     alphaRotaryEncoder.begin(PIN_ROTARY_ENCODER_A, PIN_ROTARY_ENCODER_B);
 
         // Circular buffer – stores int16_t bit-patterns in the low 16 bits of uint32_t.
     static const int CIRCULAR_BUFFER_SIZE = 512;
     uint32_t circularBuffer[CIRCULAR_BUFFER_SIZE] = {0};
     int bufferWriteIndex = 0;
-    
     uint32_t lastDisplayTime = 0;
     const uint32_t DISPLAY_INTERVAL_MS = 33; // ~30 fps
 
@@ -175,37 +174,35 @@ void core1_entry() {
 
             // Drain the inter-core queue
         uint32_t word;
-        while (queue_try_remove(&sharedQueue, &word)) {
+        while(queue_try_remove(&sharedQueue, &word)){
             circularBuffer[bufferWriteIndex] = word;
             bufferWriteIndex = (bufferWriteIndex + 1) % CIRCULAR_BUFFER_SIZE;
         }
-
         uint32_t now = time_us_32() / 1000;
-        if (now - lastDisplayTime >= DISPLAY_INTERVAL_MS) {
+        if(now - lastDisplayTime >= DISPLAY_INTERVAL_MS){
             lastDisplayTime = now;
             oled.clearDisplay();
-
-            if (mode == Mode::FFT) {
+            if(mode == Mode::FFT){
                 fi16 fftIn[256];
-                for (int i = 0; i < 256; i++) {
+                for(int i = 0; i < 256; i++){
                     fftIn[i] = (fi16)(int16_t)(uint16_t)circularBuffer[i];
                 }
                 int32_t mean = 0;
-                for (int i = 0; i < 256; i++) { mean += fftIn[i]; }
+                for(int i = 0; i < 256; i++){ mean += fftIn[i];}
                 mean >>= 8;
-                for (int i = 0; i < 256; i++) { fftIn[i] -= (fi16)mean; }
+                for(int i = 0; i < 256; i++){ fftIn[i] -= (fi16)mean;}
                 fi16_32 fftOut[256];
                 fft_fixed(fftIn, fftOut);
                 fi16_32 fftOut_max = 1;
-                for (int i = 0; i < 128; i++) {
+                for(int i = 0; i < 128; i++){
                     if (fftOut[i] > fftOut_max) fftOut_max = fftOut[i];
                 }
-                bool       max_gt_64k  = fftOut_max > 65535;
-                uint32_t   scale       = max_gt_64k
+                bool max_gt_64k = fftOut_max > 65535;
+                uint32_t scale = max_gt_64k
                                              ? (uint32_t)(fftOut_max / 65535 + 1)
                                              : (uint32_t)(65535 / fftOut_max);
 
-                for (int x = 0; x < 128; x++) {
+                for(int x = 0; x < 128; x++){
                     uint16_t dp = (uint16_t)(max_gt_64k
                                                  ? (fftOut[x] / scale)
                                                  : (fftOut[x] * scale));
@@ -214,28 +211,29 @@ void core1_entry() {
                         oled.drawPixel(x, row, true);
                     }
                 }
-
             }
-            else {
-                for (int x = 0; x < 128; x++) {
-                    if (x % 4 < 2){
+            else{
+                for(int x = 0; x < 128; x++){
+                    if(x % 4 < 2){
                         oled.drawPixel(x, 32, true);
                     }
                 }
                 int lastY = 32;
-                for (int x = 0; x < 128; x++) {
+                for(int x = 0; x < 128; x++){
                     int bufIdx = (bufferWriteIndex
                                   - CIRCULAR_BUFFER_SIZE
                                   + (x * CIRCULAR_BUFFER_SIZE) / 128
                                   + CIRCULAR_BUFFER_SIZE) % CIRCULAR_BUFFER_SIZE;
                     int16_t s = (int16_t)(uint16_t)circularBuffer[bufIdx];
                     uint16_t offset_bin = (uint16_t)s ^ 0x8000u;
-                    uint8_t  y          = 63 - (uint8_t)(offset_bin >> 10);
-                    if (y > 63) y = 63;
-                    if (x > 0) {
+                    uint8_t y = 63 - (uint8_t)(offset_bin >> 10);
+                    if(y > 63){
+                        y = 63;
+                    }
+                    if(x > 0){
                         int diff = (int)y - lastY;
-                        if (diff > 0) {
-                            for (int dy = lastY; dy <= (int)y; dy++)
+                        if(diff > 0){
+                            for(int dy = lastY; dy <= (int)y; dy++)
                                 oled.drawPixel(x, dy, true);
                         }
                         else if (diff < 0) {
@@ -243,34 +241,27 @@ void core1_entry() {
                                 oled.drawPixel(x, dy, true);
                         }
                     }
-
                     oled.drawPixel(x, y, true);
                     lastY = y;
                 }
             }
-
-            // Mode label (top-left)
             oled.setTextSize(1);
             oled.setTextColor(true);
             oled.setCursor(0, 0);
-            switch (mode) {
+            switch(mode){
                 case Mode::Pass:     oled.print("SRC"); break;
                 case Mode::Lowpass:  oled.print("LPF"); break;
                 case Mode::Highpass: oled.print("HPF"); break;
                 case Mode::FFT:      oled.print("FFT"); break;
             }
-
-            // Alpha value (top-right, filters only)
-            if (mode != Mode::Pass && mode != Mode::FFT) {
+            if(mode != Mode::Pass && mode != Mode::FFT){
                 char buf[12];
                 snprintf(buf, sizeof(buf), "a=%.2f", (float)alpha);
                 oled.setCursor(128 - 6 * 6, 0);
                 oled.print(buf);
             }
-
             oled.display();
         }
-
         sleep_us(100);
     }
 }
@@ -286,16 +277,12 @@ int main() {
 
     // Inter-core queue: element = uint32_t holding an int16_t bit-pattern.
     queue_init(&sharedQueue, sizeof(uint32_t), 256);
-
     multicore_launch_core1(core1_entry);
 
-    // I2S init
     i2sTx.setReservedMem(Tx_reservedMem, Tx_defaultMem, Tx_reservedMemWidth, Tx_reservedMemDepth);
     i2sTx.init(PIN_I2S_Tx_BCLK, PIN_I2S_Tx_WS, PIN_I2S_Tx_SD, fs, I2S_WS_FRAME_WIDTH);
-
     i2sRx.setReservedMem(Rx_reservedMem, Rx_reservedMemDepth);
     i2sRx.init(PIN_I2S_Rx_BCLK, PIN_I2S_Rx_WS, PIN_I2S_Rx_SD, fs, I2S_WS_FRAME_WIDTH);
-
     i2sTx.enable(true);
     i2sRx.enable(true);
 
@@ -306,10 +293,6 @@ int main() {
     uint32_t downsampleCounter = 0;
 
     while (true) {    
-        /*
-        if (adc0.newValue()) alpha = clamp_f(alphaMin, adc0.trueValue() / 3.3f, alphaMax);
-        if (alpha == alphaMin) alpha = 0.0f;
-        */
 
         uint32_t rxBuf[Rx_reservedMemDepth];
         uint32_t txBuf[Tx_reservedMemDepth];
