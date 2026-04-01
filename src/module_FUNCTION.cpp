@@ -30,12 +30,8 @@ static volatile uint8_t DOWNSAMPLE_FACTOR   = 16;
 static const uint8_t    SHARED_BUFFER_WIDTH = 64;
 static const uint8_t    SHARED_BUFFER_DEPTH = 128;
 static queue_t sharedQueue;
-static const uint8_t PIN_I2S_Rx_SD   = 7;
-static const uint8_t PIN_I2S_Rx_BCLK = 8;
-static const uint8_t PIN_I2S_Rx_WS   = 9;
-static I2S_Rx i2sRx;
-static const uint32_t Rx_reservedMemDepth = 128;
-static uint32_t Rx_reservedMem[Rx_reservedMemDepth * RxPingPong::WIDTH];
+
+    // I2S Tx
 static const uint8_t PIN_I2S_Tx_SD = 0;
 static const uint8_t PIN_I2S_Tx_BCLK = 2;
 static const uint8_t PIN_I2S_Tx_WS = 3;
@@ -45,24 +41,14 @@ static const uint32_t Tx_reservedMemWidth = 8;
 static uint32_t Tx_reservedMem[Tx_reservedMemDepth * Tx_reservedMemWidth];
 static uint32_t Tx_defaultMem[Tx_reservedMemDepth];
 
-static const uint16_t clock_forward_instructions[] = {0x4002, 0xa0e6, 0x6002};
-static const struct pio_program clock_forward_program = {.instructions = clock_forward_instructions, .length = 3, .origin = -1};
+    // I2S Rx
+static const uint8_t PIN_I2S_Rx_SD   = 7;
+static const uint8_t PIN_I2S_Rx_BCLK = 8;
+static const uint8_t PIN_I2S_Rx_WS   = 9;
+static I2S_Rx i2sRx;
+static const uint32_t Rx_reservedMemDepth = 128;
+static uint32_t Rx_reservedMem[Rx_reservedMemDepth * RxPingPong::WIDTH];
 
-static inline void clock_forward_init(PIO pio, uint sm, uint in_base, uint out_base){
-    uint offset = pio_add_program(pio, &clock_forward_program);
-    pio_sm_config c = pio_get_default_sm_config();
-    sm_config_set_wrap(&c, offset + 0, offset + 2);
-    sm_config_set_in_pins(&c, in_base);
-    sm_config_set_out_pins(&c, out_base, 2);
-    sm_config_set_in_shift(&c, false, false, 32);
-    sm_config_set_out_shift(&c, false, false, 32);
-    pio_sm_set_consecutive_pindirs(pio, sm, in_base,  2, false);
-    pio_sm_set_consecutive_pindirs(pio, sm, out_base, 2, true);
-    pio_gpio_init(pio, out_base);
-    pio_gpio_init(pio, out_base + 1);
-    pio_sm_init(pio, sm, offset, &c);
-    pio_sm_set_enabled(pio, sm, true);
-}
 
     // I2S GENERAL
 static const uint  I2S_WS_FRAME_WIDTH = 16;
@@ -88,12 +74,12 @@ static Mode mode = Mode::Pass;
 
     // PUSH BUTTON
 static const uint8_t PIN_PUSH_BUTTON_CHANGEMODE     = 12;
-static const uint64_t PUSH_BUTTON_DEBOUNCE_TIME_us  = 20000;
+static const uint64_t PUSH_BUTTON_DEBOUNCE_TIME_us  = 50000;
 
     // ROTARY ENCODER
 static const uint8_t PIN_ROTARY_ENCODER_A               = 1;
 static const uint8_t PIN_ROTARY_ENCODER_B               = 6;
-static const uint64_t ROTARY_ENCODER_DEBOUNCE_TIME_us   = 1000;
+static const uint64_t ROTARY_ENCODER_DEBOUNCE_TIME_us   = 10000;
 static const uint8_t ROTARY_ENCODER_MIN_POSITION        = 0;
 static const uint8_t ROTARY_ENCODER_MAX_POSITION        = 100;
 
@@ -117,7 +103,7 @@ static inline float clamp_f(float lo, float x, float hi) {
 
     // CALLBACKS
 static void changeModeCallback(PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>* pushButton, PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>::State_t next) {
-    printf("PUSH BUTTON IRQ CALLED\n");
+    //printf("PUSH BUTTON IRQ CALLED\n");
     switch (mode) {
                     case Mode::Pass: mode = Mode::Lowpass;  currentFilter = LowPass; break;
                     case Mode::Lowpass: mode = Mode::Highpass; currentFilter = HighPass; break;
@@ -152,6 +138,8 @@ void core1_entry() {
     oled.display();
     sleep_ms(2000);
 
+
+    GPIO_IRQManager::init();
         // PushButton init
     PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us> changeModePushButton;
     changeModePushButton.setCallback(changeModeCallback, false, true);
@@ -159,8 +147,8 @@ void core1_entry() {
 
         // Rotary Encoder init
     RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us> alphaRotaryEncoder;
-    alphaRotaryEncoder.setCallback(rotaryEncoderCallback, false, true);
-    alphaRotaryEncoder.setCallback(rotaryEncoderCallback, true, true);
+    //alphaRotaryEncoder.setCallback(rotaryEncoderCallback, false, true);
+    //alphaRotaryEncoder.setCallback(rotaryEncoderCallback, true, true);
     alphaRotaryEncoder.begin(PIN_ROTARY_ENCODER_A, PIN_ROTARY_ENCODER_B);
 
         // Circular buffer – stores int16_t bit-patterns in the low 16 bits of uint32_t.
@@ -291,7 +279,6 @@ int main() {
     queue_init(&sharedQueue, sizeof(uint32_t), 256);
     multicore_launch_core1(core1_entry);
 
-    clock_forward_init(pio1, 0, PIN_I2S_Rx_BCLK, PIN_I2S_Tx_BCLK);
     i2sTx.setReservedMem(Tx_reservedMem, Tx_defaultMem, Tx_reservedMemWidth, Tx_reservedMemDepth);
     i2sTx.init(PIN_I2S_Tx_BCLK, PIN_I2S_Tx_WS, PIN_I2S_Tx_SD, fs, I2S_WS_FRAME_WIDTH);
     i2sRx.setReservedMem(Rx_reservedMem, Rx_reservedMemDepth);
