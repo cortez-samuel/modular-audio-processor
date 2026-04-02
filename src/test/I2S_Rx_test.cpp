@@ -1,12 +1,12 @@
-#include "../libraries/I2S_Rx_naive.pio.h"
+#include "../lib/I2S_Rx_naive.pio.h"
 
 #define I2S_RX_PROGRAM I2S_RX_PROGRAM__AUTOFRAME
 
 #include "hardware/pio.h"
 #include "hardware/irq.h"
 
-#include "../libraries/I2S.h"
-#include "../libraries/RxPingPong.h"
+#include "../lib/I2S.h"
+#include "../lib/RxPingPong.h"
 
 #include "pico/stdlib.h"
 

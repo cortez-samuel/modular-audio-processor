@@ -1,6 +1,6 @@
 #include "pico/stdlib.h"
 
-#include "../libraries/RotaryEncoder.hpp"
+#include "../lib/RotaryEncoder.hpp"
 
 #include <cstdio>
 

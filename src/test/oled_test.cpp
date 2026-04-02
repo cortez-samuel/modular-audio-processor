@@ -1,6 +1,6 @@
 #include "pico/stdlib.h"
-#include "../libraries/oled.h"
-#include "../libraries/adc.hpp"
+#include "../lib/oled.h"
+#include "../lib/adc.hpp"
 #include <math.h>
 #include <cstdio>
 #include <stdio.h>

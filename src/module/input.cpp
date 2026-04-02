@@ -1,7 +1,7 @@
 #include "pico/stdlib.h"
 #include "hardware/adc.h"
-#include "../libraries/adc.hpp"
-#include "../libraries/I2S.h"
+#include "../lib/adc.hpp"
+#include "../lib/I2S.h"
 #include <cstdio>
 #include <cstdint>
 

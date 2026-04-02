@@ -1,9 +1,9 @@
-#include "../libraries/I2S_Tx_naive.pio.h"
-#include "../libraries/I2S_Tx_compact.pio.h"
+#include "../lib/I2S_Tx_naive.pio.h"
+#include "../lib/I2S_Tx_compact.pio.h"
 
 #include "hardware/pio.h"
 
-#include "../libraries/I2S.h"
+#include "../lib/I2S.h"
 
 #include "pico/stdlib.h"
 #include <cstdio>
