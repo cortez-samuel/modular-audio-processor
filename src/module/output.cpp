@@ -1,6 +1,6 @@
 #include "pico/stdlib.h"
 
-#include "../libraries/I2S.h"
+#include "../lib/I2S.h"
 
 #include <cstdio>
 

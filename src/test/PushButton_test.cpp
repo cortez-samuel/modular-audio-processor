@@ -1,8 +1,8 @@
 #include "pico/stdlib.h"
 
-#include "../libraries/PushButton.hpp"
-#include "../libraries/RotaryEncoder.hpp"
-#include "../libraries/GPIO_IRQManager.hpp"
+#include "../lib/PushButton.hpp"
+#include "../lib/RotaryEncoder.hpp"
+#include "../lib/GPIO_IRQManager.hpp"
 
 #include <cstdio>
 

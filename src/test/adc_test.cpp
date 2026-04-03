@@ -1,4 +1,4 @@
-#include "../libraries/adc.hpp"
+#include "../lib/adc.hpp"
 
 #include "pico/stdlib.h"
 #include <cstdio>
