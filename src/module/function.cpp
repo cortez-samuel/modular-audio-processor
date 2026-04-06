@@ -12,6 +12,7 @@
 #include "../lib/fft.hpp"
 #include "../lib/PushButton.hpp"
 #include "../lib/RotaryEncoder.hpp"
+#include "../lib/filters.h"
 
     // LED PIN
 static const uint LED_PIN           = 13;
@@ -58,11 +59,31 @@ static const float fs                 = 44100;
 static float volatile alpha          = 0.0f;
 static float alphaMin                = 0.0f;
 static float alphaMax                = 1.0f;
-static float (*currentFilter)(float) = nullptr;
-static float filterOutput            = 0.0f;
-static float Pass(float x);
-static float LowPass(float x);
-static float HighPass(float x);
+static const uint FILTER_BUFFER_DEPTH   = 128;
+static float buffer_X[FILTER_BUFFER_DEPTH];
+static float buffer_Y[FILTER_BUFFER_DEPTH];
+static CyclicBuffer_t<float> cyclicBuffer_X(buffer_X, FILTER_BUFFER_DEPTH);
+static CyclicBuffer_t<float> cyclicBuffer_Y(buffer_Y, FILTER_BUFFER_DEPTH);
+static FilterInstance_t* currentFilter  = nullptr;
+
+static FilterInstance_t FILTER_PASS {
+    .filter_name    = "SRC",
+    .filter         = Filters::PASS,
+    .x              = &cyclicBuffer_X,
+    .y              = &cyclicBuffer_Y,
+};
+static FilterInstance_t FILTER_LPF {
+    .filter_name    = "LPF",
+    .filter         = Filters::FirstOrderIIR::LPF,
+    .x              = &cyclicBuffer_X,
+    .y              = &cyclicBuffer_Y,
+};
+static FilterInstance_t FILTER_HPF {
+    .filter_name    = "HPF",
+    .filter         = Filters::FirstOrderIIR::HPF,
+    .x              = &cyclicBuffer_X,
+    .y              = &cyclicBuffer_Y,
+};
 
 enum class Mode { 
     Pass, 
@@ -105,10 +126,10 @@ static inline float clamp_f(float lo, float x, float hi) {
 static void changeModeCallback(PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>* pushButton, PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>::State_t next) {
     //printf("PUSH BUTTON IRQ CALLED\n");
     switch (mode) {
-                    case Mode::Pass: mode = Mode::Lowpass;  currentFilter = LowPass; break;
-                    case Mode::Lowpass: mode = Mode::Highpass; currentFilter = HighPass; break;
-                    case Mode::Highpass: mode = Mode::FFT; currentFilter = Pass; break;
-                    case Mode::FFT: mode = Mode::Pass; currentFilter = Pass; break;
+                    case Mode::Pass: mode = Mode::Lowpass;  currentFilter = &FILTER_LPF; break;
+                    case Mode::Lowpass: mode = Mode::Highpass; currentFilter = &FILTER_HPF; break;
+                    case Mode::Highpass: mode = Mode::FFT; currentFilter = &FILTER_PASS; break;
+                    case Mode::FFT: mode = Mode::Pass; currentFilter = &FILTER_PASS; break;
                 }
 }
 static inline void rotaryEncoderCallback(RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us>* inst, RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us>::State_t next) {
@@ -220,10 +241,7 @@ void core1_entry() {
                 }
                 int lastY = 32;
                 for(int x = 0; x < 128; x++){
-                    int bufIdx = (bufferWriteIndex
-                                  - CIRCULAR_BUFFER_SIZE
-                                  + (x * CIRCULAR_BUFFER_SIZE) / 128
-                                  + CIRCULAR_BUFFER_SIZE) % CIRCULAR_BUFFER_SIZE;
+                    int bufIdx = (bufferWriteIndex + x * 4) % CIRCULAR_BUFFER_SIZE;
                     int16_t s = (int16_t)(uint16_t)circularBuffer[bufIdx];
                     uint16_t offset_bin = (uint16_t)s ^ 0x8000u;
                     uint8_t y = 63 - (uint8_t)(offset_bin >> 10);
@@ -249,10 +267,8 @@ void core1_entry() {
             oled.setTextColor(true);
             oled.setCursor(0, 0);
             switch(mode){
-                case Mode::Pass:     oled.print("SRC"); break;
-                case Mode::Lowpass:  oled.print("LPF"); break;
-                case Mode::Highpass: oled.print("HPF"); break;
-                case Mode::FFT:      oled.print("FFT"); break;
+                case Mode::FFT: oled.print("FFT"); break;
+                default:        oled.print(currentFilter->filter_name); break;    
             }
             if(mode != Mode::Pass && mode != Mode::FFT){
                 char buf[12];
@@ -287,7 +303,7 @@ int main() {
     i2sRx.enable(true);
 
     // initialize filter
-    currentFilter = Pass;
+    currentFilter = &FILTER_PASS;
     mode = Mode::Pass;
 
     uint32_t downsampleCounter = 0;
@@ -305,7 +321,7 @@ int main() {
                 int16_t raw_sample = (raw_sample_LC >> 1) + (raw_sample_RC >> 1);
                     // do filter
                 float s_vol = fix_to_float(raw_sample);
-                float filtered_vol = currentFilter(s_vol);
+                float filtered_vol = call_filter(currentFilter, s_vol, alpha);
                 filtered_vol = clamp_f(-1.0f, filtered_vol, 1.0f);
                 int16_t out_sample = float_to_fix(filtered_vol);
                     // output sample
@@ -321,22 +337,4 @@ int main() {
             }
         }
     }
-}
-
-float Pass(float x){
-    return x;
-}
-
-float LowPass(float x){
-    static float y  = 0.0f;
-    y = alpha * x + (1.0f - alpha) * y;
-    return y;
-}
-
-float HighPass(float x){
-    static float y  = 0.0f;
-    static float x_prev = 0.0f;
-    y = alpha * (y + x - x_prev);
-    x_prev = x;
-    return y;
 }

@@ -33,7 +33,7 @@ int main() {
     };
 
     for (uint i = 0; i < N; i++) {
-        float y_i = call_filter(LPF, i, 0.15f);
+        float y_i = call_filter(&LPF, 0.15f, i);
         float expected_y_i = LPF_func(i, 0.15f);
         printf("y_%u = %f\texpected: %f\n", i, y_i, expected_y_i);
     }

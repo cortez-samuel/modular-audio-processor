@@ -12,7 +12,6 @@ class CyclicBuffer_t {
     
     uint head;
 
-
 public:
     CyclicBuffer_t(_T* buff, uint length) {
         buffer = buff;

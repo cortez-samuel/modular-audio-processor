@@ -12,10 +12,11 @@ struct FilterInstance_t {
     CyclicBuffer_t<float> *x    = nullptr;
     CyclicBuffer_t<float> *y    = nullptr;
 };
-float call_filter(FilterInstance_t inst, float param, float x_n);
+float call_filter(FilterInstance_t *inst, float x_n, float param);
 
 
 namespace Filters {
+    float PASS(CyclicBuffer_t<float> *x, CyclicBuffer_t<float> *y, float x_n, float param);
   namespace FirstOrderIIR{
     float LPF(CyclicBuffer_t<float> *x, CyclicBuffer_t<float> *y, float x_n, float param);
     float HPF(CyclicBuffer_t<float> *x, CyclicBuffer_t<float> *y, float x_n, float param);

@@ -32,7 +32,7 @@ set(PICO_BOARD adafruit_feather_rp2040 CACHE STRING "Board type")
 include(pico_sdk_import.cmake)
 
 # name project the name of executable being run/tested
-project(filter_test C CXX ASM)
+project(module_FUNCTION C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -75,6 +75,7 @@ add_executable(module_FUNCTION
     src/lib/adc.cpp
     src/lib/oled.cpp
     src/lib/fft.cpp
+    src/lib/filters.cpp
 )
 pico_generate_pio_header(module_FUNCTION ${CMAKE_CURRENT_LIST_DIR}/src/lib/pio/I2S_Tx_naive.pio)
 pico_generate_pio_header(module_FUNCTION ${CMAKE_CURRENT_LIST_DIR}/src/lib/pio/I2S_Tx_compact.pio)
