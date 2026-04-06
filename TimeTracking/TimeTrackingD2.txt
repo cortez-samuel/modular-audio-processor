@@ -151,3 +151,6 @@ Noah McGlothlin :: 3/26/26 2:00am - 4:00am 3/27/2026 9:00am - 12:30pm
   -- Added support for multiple GPIO IRQs
   -- Implemented RotaryEncoder and PushButton in module_FUNCTION file
   -- -- still sometimes bounces, seemed to be primarily because of bad connections though
+
+Noah McGlothlin :: 4/5/2026 1:30pm - 4:00pm  11:00pm - 11:30pm
+  -- Added cyclicbuffer class and implemented it for filters + testing for filters for easy of use.

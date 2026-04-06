@@ -32,7 +32,7 @@ set(PICO_BOARD adafruit_feather_rp2040 CACHE STRING "Board type")
 include(pico_sdk_import.cmake)
 
 # name project the name of executable being run/tested
-project(module_FUNCTION C CXX ASM)
+project(filter_test C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -124,7 +124,7 @@ target_include_directories(module_OUTPUT PRIVATE
 )
 pico_add_extra_outputs(module_OUTPUT)
 
-if(BUILD_TESTS)
+if(1)
 
 ######### GENERAL ##########
 add_executable(general_test
@@ -149,6 +149,23 @@ target_include_directories(general_test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 pico_add_extra_outputs(general_test)
+
+########## FILTERS ##########
+add_executable(filter_test
+    src/test/filter_test.cpp
+    src/lib/filters.cpp
+)
+
+pico_enable_stdio_uart(filter_test 0)
+pico_enable_stdio_usb(filter_test 1)
+
+target_link_libraries(filter_test
+    pico_stdlib
+)
+target_include_directories(filter_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+pico_add_extra_outputs(filter_test)
 
 ######### OLED ##########
 add_executable(oled_test
