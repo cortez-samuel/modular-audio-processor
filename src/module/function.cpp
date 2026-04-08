@@ -123,17 +123,13 @@ static inline float clamp_f(float lo, float x, float hi) {
 }
 
     // CALLBACKS
-static void changeModeCallback(PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>* pushButton, PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>::State_t next) {
-    //printf("PUSH BUTTON IRQ CALLED\n");
+static void changeModeCallback(PushButton* pushButton, PushButton::State_t next) {
     switch (mode) {
-                    case Mode::Pass: mode = Mode::Lowpass;  currentFilter = &FILTER_LPF; break;
-                    case Mode::Lowpass: mode = Mode::Highpass; currentFilter = &FILTER_HPF; break;
-                    case Mode::Highpass: mode = Mode::FFT; currentFilter = &FILTER_PASS; break;
-                    case Mode::FFT: mode = Mode::Pass; currentFilter = &FILTER_PASS; break;
-                }
-}
-static inline void rotaryEncoderCallback(RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us>* inst, RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us>::State_t next) {
-    printf("ROTARY ENCODER CALLBACK CALLED\n");
+        case Mode::Pass: mode = Mode::Lowpass;  currentFilter = &FILTER_LPF; break;
+        case Mode::Lowpass: mode = Mode::Highpass; currentFilter = &FILTER_HPF; break;
+        case Mode::Highpass: mode = Mode::FFT; currentFilter = &FILTER_PASS; break;
+        case Mode::FFT: mode = Mode::Pass; currentFilter = &FILTER_PASS; break;
+    }
 }
 
 // CORE 1 (OLED DISPLAY) MAIN
@@ -162,14 +158,25 @@ void core1_entry() {
 
     GPIO_IRQManager::init();
         // PushButton init
-    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us> changeModePushButton;
-    changeModePushButton.setCallback(changeModeCallback, false, true);
+    PushButton changeModePushButton;
+    changeModePushButton.settings = {
+        .debounceTime_us    = PUSH_BUTTON_DEBOUNCE_TIME_us,
+        .onDown             = changeModeCallback,
+        .onDownEnabled      = true,
+        .onUp               = nullptr,
+        .onUpEnabled        = false,
+    };
     changeModePushButton.begin(PIN_PUSH_BUTTON_CHANGEMODE);
 
         // Rotary Encoder init
-    RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us> alphaRotaryEncoder;
-    //alphaRotaryEncoder.setCallback(rotaryEncoderCallback, false, true);
-    //alphaRotaryEncoder.setCallback(rotaryEncoderCallback, true, true);
+    RotaryEncoder alphaRotaryEncoder;
+    alphaRotaryEncoder.settings = {
+        .debounceTime_us    = ROTARY_ENCODER_DEBOUNCE_TIME_us,
+        .onInc              = nullptr,
+        .onIncEnabled       = false,
+        .onDec              = nullptr,
+        .onDecEnabled       = false,
+    };
     alphaRotaryEncoder.begin(PIN_ROTARY_ENCODER_A, PIN_ROTARY_ENCODER_B);
 
         // Circular buffer – stores int16_t bit-patterns in the low 16 bits of uint32_t.

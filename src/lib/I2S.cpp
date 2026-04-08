@@ -6,6 +6,7 @@ I2S_Tx::I2S_Tx() : settings(defaultSettings) {
     #elif   I2S_TX_PROGRAM == I2S_TX_PROGRAM__COMPACT
         pio_claim_free_sm_and_add_program(&I2S_Tx_compact_program, &pio, &sm, &offset);
     #endif
+    settings = defaultSettings;
 }
 
 void I2S_Tx::enable(bool start) {
@@ -24,6 +25,7 @@ I2S_Rx::I2S_Rx() :
     #elif   I2S_RX_PROGRAM == I2S_RX_PROGRAM__AUTOFRAME
         pio_claim_free_sm_and_add_program(&I2S_Rx_autoFrame_program, &pio, &sm, &offset);
     #endif
+    settings = defaultSettings;
 }
 
 bool I2S_Rx::init(uint BCLK_pin, uint WS_pin, uint SD_pin) {

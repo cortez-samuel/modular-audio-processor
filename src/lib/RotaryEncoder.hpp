@@ -5,10 +5,7 @@
 
 #include "GPIO_IRQManager.hpp"
 
-template<uint64_t BOUNCING_TIME>
 class RotaryEncoder {
-    static const uint64_t BOUNCING_TIME_us = BOUNCING_TIME;
-
     static inline RotaryEncoder* instances[32];
 
 public:
@@ -19,13 +16,27 @@ public:
         State_t state;
     };
 
+public:
+    using RotaryEncoderCallback_t = void (*)(RotaryEncoder*, State_t);
+    struct Settings_t {
+        uint64_t debounceTime_us;
+        RotaryEncoderCallback_t onInc;
+        bool onIncEnabled;
+        RotaryEncoderCallback_t onDec;
+        bool onDecEnabled;
+    };
+
+    inline static constexpr Settings_t defaultSettings {
+        .debounceTime_us    = 10000,
+        .onInc              = nullptr,
+        .onIncEnabled       = false,
+        .onDec              = nullptr,
+        .onDecEnabled       = false,
+    };
+    Settings_t settings; 
+
 private:
     uint _pinA, _pinB;
-
-    void (*posRotateCallback)(RotaryEncoder*, State_t nextState);
-    bool posRotateCallbackEnabled;
-    void (*negRotateCallback)(RotaryEncoder*, State_t nextState);
-    bool negRotateCallbackEnabled;
 
     uint64_t t0;
     bool bouncing;
@@ -33,32 +44,11 @@ private:
 
 public:
     RotaryEncoder() {
-        _pinA   = 0;
-        _pinB   = 0;
-
-        posRotateCallback           = nullptr;
-        posRotateCallbackEnabled    = false;
-        negRotateCallback           = nullptr;
-        negRotateCallbackEnabled    = false;
-
         t0          = 0;
         bouncing    = false;
         position    = 0;        
-    }
-    RotaryEncoder(uint pinA, uint pinB) {
-        _pinA   = 0;
-        _pinB   = 0;
-
-        posRotateCallback           = nullptr;
-        posRotateCallbackEnabled    = false;
-        negRotateCallback           = nullptr;
-        negRotateCallbackEnabled    = false;
-
-        t0          = 0;
-        bouncing    = false;
-        position    = 0;
-
-        begin(pinA, pinB);
+        
+        settings    = defaultSettings;
     }
 
 public:
@@ -80,19 +70,8 @@ public:
 
 public:
     inline bool isBouncing() {
-        bouncing = (time_us_64() - t0) < BOUNCING_TIME_us;
+        bouncing = (time_us_64() - t0) < settings.debounceTime_us;
         return bouncing;
-    }
-
-    inline void setCallback(void (*callback)(RotaryEncoder*, State_t), bool isNegRotateCallback, bool enabled) {
-        if (isNegRotateCallback) {
-            negRotateCallbackEnabled = enabled;
-            negRotateCallback = callback;
-        }
-        else {
-            posRotateCallbackEnabled = enabled;
-            posRotateCallback = callback;
-        }
     }
 
     inline State_t getState() const {
@@ -120,11 +99,11 @@ private:
     void __time_critical_func(_GPIOIRQ)(uint gpio, uint32_t event_mask) {
         if (!isBouncing()) {
             if (gpio_get(_pinB)) {
-                if (posRotateCallbackEnabled) posRotateCallback(this, position + 1);
+                if (settings.onIncEnabled && settings.onInc != nullptr) settings.onInc(this, position + 1);
                 updatePosition(1);
             }
             else {
-                if (negRotateCallbackEnabled) negRotateCallback(this, position - 1);
+                if (settings.onDecEnabled && settings.onDec != nullptr) settings.onDec(this, position - 1);
                 updatePosition(-1);
             }
             t0 = time_us_64();

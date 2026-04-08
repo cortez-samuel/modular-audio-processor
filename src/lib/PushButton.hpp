@@ -5,10 +5,7 @@
 
 #include "GPIO_IRQManager.hpp"
 
-template<uint64_t BOUNCING_TIME>
-struct PushButton {
-    static const uint64_t BOUNCING_TIME_us = BOUNCING_TIME;
-
+class PushButton {
     static inline PushButton* instances[32];
 
 public:
@@ -22,13 +19,27 @@ public:
         State_t state;
     };
 
+public:
+    using PushButtonCallback_t = void (*)(PushButton*, State_t);
+    struct Settings_t {
+        uint64_t debounceTime_us;
+        PushButtonCallback_t onDown;
+        bool onDownEnabled;
+        PushButtonCallback_t onUp;
+        bool onUpEnabled;
+    };
+    
+    inline static constexpr Settings_t defaultSettings {
+        .debounceTime_us    = 50000,
+        .onDown             = nullptr,
+        .onDownEnabled      = false,
+        .onUp               = nullptr,
+        .onUpEnabled        = false,
+    };
+    Settings_t settings;
+
 private:
     uint _pin;
-    
-    void (*onDownCallback)(PushButton*, State_t);
-    bool onDownCallbackEnabled;
-    void (*onUpCallback)(PushButton*, State_t);
-    bool onUpCallbackEnabled;
 
     uint64_t t0;
     bool bouncing;
@@ -36,14 +47,11 @@ private:
 
 public:
     PushButton() {
-        t0 = 0;
-        bouncing = false;
-        state = UP;
+        t0          = 0;
+        bouncing    = false;
+        state       = UP;
 
-        onDownCallback = nullptr;
-        onDownCallbackEnabled = false;
-        onUpCallback = nullptr;
-        onUpCallbackEnabled = false;
+        settings    = defaultSettings;
     }
 
 public:
@@ -62,19 +70,8 @@ public:
 
 public:
     inline bool isBouncing() {
-        bouncing = (time_us_64() - t0) < BOUNCING_TIME_us;
+        bouncing = (time_us_64() - t0) < settings.debounceTime_us;
         return bouncing;
-    }
-
-    inline void setCallback(void (*callback)(PushButton*, State_t), bool isOnUpCallback, bool enabled) {
-        if (isOnUpCallback) {
-            onUpCallbackEnabled = enabled;
-            onUpCallback = callback;
-        }
-        else {
-            onDownCallbackEnabled = enabled;
-            onDownCallback = callback;
-        }
     }
 
     inline State_t getState() const {
@@ -103,14 +100,14 @@ public:
     void __time_critical_func(_GPIOIRQ)(uint gpio, uint32_t event_mask) {
         if (!isBouncing()) {
             if ((event_mask & GPIO_IRQ_EDGE_RISE) && state == UP) {    // push button pressed
-                if (onDownCallbackEnabled && (onDownCallback != nullptr)) { 
-                    onDownCallback(this, DOWN); 
+                if (settings.onDownEnabled && (settings.onDown != nullptr)) { 
+                    settings.onDown(this, DOWN); 
                 }
                 onDown();
             }
             else if ((event_mask & GPIO_IRQ_EDGE_FALL) && state == DOWN) { // push button released
-                if (onUpCallbackEnabled && (onUpCallback != nullptr)) { 
-                    onUpCallback(this, UP); 
+                if (settings.onUpEnabled && (settings.onUp != nullptr)) { 
+                    settings.onUp(this, UP); 
                 }
                 onUp();
             }
@@ -121,7 +118,6 @@ public:
         gpio_acknowledge_irq(gpio, event_mask);
     }
     static void __time_critical_func(_clsGPIOIRQ)(uint gpio, uint32_t event_mask) {
-        //printf("\t PUSHBUTTONCLS: %u -- %02x\n", gpio, event_mask);
         PushButton* instance = instances[gpio];
         if (instance == nullptr) {
             return;

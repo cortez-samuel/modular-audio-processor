@@ -28,7 +28,7 @@ public:
         .freeRun    = true,
         .rrEnabled  = false,
     };
-    static inline Settings_t settings;
+    static inline Settings_t settings = defaultSettings;
 
 public:
     static inline ADC* __availableChannels[4];
