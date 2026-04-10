@@ -106,7 +106,6 @@ static const uint8_t  ROTARY_ENCODER_MAX_POSITION       = 100;
 
     // ROTARY ENCODER PUSH-SWITCH – press timing
 static const uint64_t LONG_PRESS_THRESHOLD_us   = 1000000;     // 1 second: long press
-static volatile uint64_t encSwPressStart_us      = 0;          // set in onDown ISR
 
     // flags set inside ISR, consumed by core1 main loop
 static volatile bool pendingModeChange  = false;
@@ -183,21 +182,13 @@ static void changeModeCallback(
     cycleMode();
 }
 
-// Rotary-encoder switch – onDown: record press start time.
-static void encSwDownCallback(
-    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>* /*pb*/,
-    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>::State_t /*next*/)
-{
-    encSwPressStart_us = time_us_64();
-}
-
 // Rotary-encoder switch – onUp: decide short vs long press.
 static void encSwUpCallback(
-    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>* /*pb*/,
-    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>::State_t /*next*/)
+    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>* inst,
+    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>::State_t next)
 {
-    uint64_t duration = time_us_64() - encSwPressStart_us;
-    if (duration >= LONG_PRESS_THRESHOLD_us) {
+    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>::StateDetails_t details = inst->getStateDetails();
+    if (details.duration_us >= LONG_PRESS_THRESHOLD_us) {
         // Long press -> save to flash (deferred to main loop)
         pendingFlashSave = true;
     } else {
@@ -253,15 +244,10 @@ void core1_entry() {
 
     GPIO_IRQManager::init();
 
-    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us> changeModePushButton;
-    changeModePushButton.setCallback(changeModeCallback, false, true);   // onDown
-    changeModePushButton.begin(PIN_PUSH_BUTTON_CHANGEMODE);
-
     // Rotary encoder switch (short press = mode, long press = save)
     PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us> encSwPushButton;
-    encSwPushButton.setCallback(encSwDownCallback, false, true);    // onDown -> record time
     encSwPushButton.setCallback(encSwUpCallback,   true,  true);    // onUp   -> decide action
-    encSwPushButton.begin(PIN_ROTARY_ENCODER_SW);
+    encSwPushButton.begin(12);
 
     // Rotary encoder (turning adjusts alpha)
     RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us> alphaRotaryEncoder;
