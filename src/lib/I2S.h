@@ -84,6 +84,10 @@ public:
     }
     void enable(bool start);
 
+    // temp stop pio state machine w/o touching dma channel config
+    inline void pause()  { pio_sm_set_enabled(pio, sm, false); }
+    inline void resume() { pio_sm_set_enabled(pio, sm, true);  }
+
 public:
     inline bool queue(AudioSample_t sample) {
         bool LC_valid, RC_valid;
@@ -144,6 +148,9 @@ public:
 public:
     bool init(uint BCLK_pin, uint WS_pin, uint SD_pin);
     void enable(bool start);
+
+    inline void pause()  { pio_sm_set_enabled(pio, sm, false); }
+    inline void resume() { pio_sm_set_enabled(pio, sm, true);  }
 
 public:
     inline bool read(AudioSample_t& sample) {

@@ -1,8 +1,10 @@
 #include "pico/stdlib.h"
-
 #include "hardware/pio.h"
 #include "hardware/dma.h"
 #include "hardware/irq.h"
+#include "hardware/flash.h"
+#include "hardware/sync.h"
+#include "pico/flash.h"
 #include "pico/multicore.h"
 #include "pico/util/queue.h"
 
@@ -34,7 +36,7 @@ static const uint8_t SHARED_BUFFER_DEPTH = 128;
 static queue_t sharedQueue;
 
     // I2S Tx
-static const uint8_t PIN_I2S_Tx_SD = 0;
+static const uint8_t PIN_I2S_Tx_SD   = 0;
 static const uint8_t PIN_I2S_Tx_BCLK = 2;
 static const uint8_t PIN_I2S_Tx_WS = 3;
 
@@ -48,7 +50,7 @@ static const uint  I2S_WS_FRAME_WIDTH = 16;
 static const float fs                 = 44100;
 
     // FILTERS
-static float volatile alpha          = 0.0f;
+static float volatile alpha          = 1.0f;
 static float alphaMin                = 0.0f;
 static float alphaMax                = 1.0f;
 static const uint FILTER_BUFFER_DEPTH   = 128;
@@ -83,62 +85,124 @@ enum class Mode {
     Highpass, 
     FFT 
 };
-static Mode mode = Mode::Pass;
+static Mode mode = Mode::Pass;      // default: SRC / Pass
 
-    // PUSH BUTTON
-static const uint8_t PIN_PUSH_BUTTON_CHANGEMODE     = 12;
+static const uint8_t  PIN_PUSH_BUTTON_CHANGEMODE    = 12;
 static const uint64_t PUSH_BUTTON_DEBOUNCE_TIME_us  = 50000;
 
     // ROTARY ENCODER
-static const uint8_t PIN_ROTARY_ENCODER_A               = 1;
-static const uint8_t PIN_ROTARY_ENCODER_B               = 6;
+static const uint8_t  PIN_ROTARY_ENCODER_A              = 1;
+static const uint8_t  PIN_ROTARY_ENCODER_B              = 6;
+static const uint8_t  PIN_ROTARY_ENCODER_SW             = 20;
 static const uint64_t ROTARY_ENCODER_DEBOUNCE_TIME_us   = 10000;
-static const uint8_t ROTARY_ENCODER_MIN_POSITION        = 0;
-static const uint8_t ROTARY_ENCODER_MAX_POSITION        = 100;
+static const uint8_t  ROTARY_ENCODER_MIN_POSITION       = 0;
+static const uint8_t  ROTARY_ENCODER_MAX_POSITION       = 100;
 
+    // ROTARY ENCODER PUSH-SWITCH – press timing
+static const uint64_t LONG_PRESS_THRESHOLD_us   = 1000000;     // 1 second: long press
 
-    //  FIXEDPOINT CONVERSIONS
+    // flags set inside ISR, consumed by core1 main loop
+static volatile bool pendingModeChange  = false;
+static volatile bool pendingFlashSave   = false;
+// set by Core 0 after it finishes the flash write; consumed by Core 1 to show the banner
+static volatile bool flashSaveDone      = false;
+
+#define FEATHER_RP2040_FLASH_SIZE   (8u * 1024u * 1024u)   // 8 MB
+#define FLASH_MAGIC         0xA55A1234u
+#define FLASH_TARGET_OFFSET (FEATHER_RP2040_FLASH_SIZE - FLASH_SECTOR_SIZE)
+
+struct FlashData {
+    uint32_t magic;
+    float alpha;
+    uint32_t mode;      // stored as uint32_t so the struct layout stays simple
+};
+
+static void __not_in_flash_func(flashWriteCallback)(void* param) {
+    const FlashData* d = reinterpret_cast<const FlashData*>(param);
+    static uint8_t pageBuf[FLASH_PAGE_SIZE];
+    __builtin_memset(pageBuf, 0xFF, sizeof(pageBuf));
+    __builtin_memcpy(pageBuf, d, sizeof(FlashData));
+    flash_range_erase(FLASH_TARGET_OFFSET, FLASH_SECTOR_SIZE);
+    flash_range_program(FLASH_TARGET_OFFSET, pageBuf, FLASH_PAGE_SIZE);
+}
+
+// save current alpha and mode to flash
+static void saveToFlash(float a, Mode m) {
+    static FlashData data;          // static so it stays alive inside the callback
+    data.magic = FLASH_MAGIC;
+    data.alpha = a;
+    data.mode  = static_cast<uint32_t>(m);
+    // flash_safe_execute pauses the other core so both aren't executing from flash
+    flash_safe_execute(flashWriteCallback, &data, UINT32_MAX);
+}
+
+// try to read previously saved data, returns true on success.
+static bool loadFromFlash(float& outAlpha, Mode& outMode) {
+    const FlashData* d = reinterpret_cast<const FlashData*>(
+        XIP_BASE + FLASH_TARGET_OFFSET);
+    if (d->magic != FLASH_MAGIC) return false;
+    outAlpha = d->alpha;
+    outMode  = static_cast<Mode>(d->mode);
+    return true;
+}
+
+static inline void cycleMode() {
+    switch (mode) {
+        case Mode::Pass:     mode = Mode::Lowpass;  currentFilter = &FILTER_LPF;  break;
+        case Mode::Lowpass:  mode = Mode::Highpass; currentFilter = &FILTER_HPF;  break;
+        case Mode::Highpass: mode = Mode::FFT;      currentFilter = &FILTER_PASS; break;
+        case Mode::FFT:      mode = Mode::Pass;     currentFilter = &FILTER_PASS; break;
+    }
+}
+
 static const float _E_SCALE = 32768.0f;
 static inline float fix_to_float(int16_t x) {
-    return (float)x / _E_SCALE;
+    return static_cast<float>(x) / _E_SCALE;
 }
-        // float in [-1, 1)  ->  int16_t  (saturating)
 static inline int16_t float_to_fix(float x) {
     if (x >=  1.0f) return  0x7FFF;
-    if (x <= -1.0f) return (int16_t)0x8000;
-    return (int16_t)(x * 32767.0f);
+    if (x <= -1.0f) return static_cast<int16_t>(0x8000);
+    return static_cast<int16_t>(x * 32767.0f);
 }
-
-    // HELPER FUNCTIONS
 static inline float clamp_f(float lo, float x, float hi) {
     return x < lo ? lo : (x > hi ? hi : x);
 }
 
-    // CALLBACKS
-static void changeModeCallback(PushButton* pushButton, PushButton::State_t next) {
-    switch (mode) {
-        case Mode::Pass: mode = Mode::Lowpass;  currentFilter = &FILTER_LPF; break;
-        case Mode::Lowpass: mode = Mode::Highpass; currentFilter = &FILTER_HPF; break;
-        case Mode::Highpass: mode = Mode::FFT; currentFilter = &FILTER_PASS; break;
-        case Mode::FFT: mode = Mode::Pass; currentFilter = &FILTER_PASS; break;
+//  CALLBACKS
+
+// Rotary-encoder switch – onUp: decide short vs long press.
+static void encSwUpCallback(
+    PushButton* inst,
+    PushButton::State_t next)
+{
+    PushButton::StateDetails_t details = inst->getStateDetails();
+    if (details.duration_us >= LONG_PRESS_THRESHOLD_us) {
+        // Long press -> save to flash (deferred to main loop)
+        pendingFlashSave = true;
+    } else {
+        // Short press -> cycle mode (deferred to main loop)
+        pendingModeChange = true;
     }
 }
 
-// CORE 1 (OLED DISPLAY) MAIN
+// CORE 1 – OLED DISPLAY + INPUT HANDLING
 void core1_entry() {
-        // Initialize OLED
+    flash_safe_execute_core_init();
+    multicore_fifo_push_blocking(0);
+
+    // Initialize OLED
     gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
     gpio_set_function(PIN_TX,  GPIO_FUNC_SPI);
     OLED oled(SPI_INSTANCE, PIN_CS, PIN_DC, PIN_RST, 128, 64);
     sleep_ms(500);
-    if(!oled.begin(10 * 1000 * 1000)){
+    if (!oled.begin(10 * 1000 * 1000)) {
         while (true) {
             gpio_put(LED_PIN, 1); sleep_ms(500);
             gpio_put(LED_PIN, 0); sleep_ms(500);
         }
     }
 
-        // Startup splash
+    // Startup splash
     oled.clearDisplay();
     oled.setCursor(10, 5);
     oled.setTextSize(2);
@@ -147,15 +211,33 @@ void core1_entry() {
     oled.display();
     sleep_ms(2000);
 
+    // load saved state from flash
+    {
+        float   savedAlpha = 1.0f;          // default: 1.00
+        Mode    savedMode  = Mode::Pass;    // default: SRC
+
+        if (loadFromFlash(savedAlpha, savedMode)) {
+            savedAlpha = clamp_f(alphaMin, savedAlpha, alphaMax);
+        }
+
+        alpha = savedAlpha;
+        mode  = savedMode;
+        switch (mode) {
+            case Mode::Pass:     currentFilter = &FILTER_PASS; break;
+            case Mode::Lowpass:  currentFilter = &FILTER_LPF;  break;
+            case Mode::Highpass: currentFilter = &FILTER_HPF;  break;
+            case Mode::FFT:      currentFilter = &FILTER_PASS; break;
+        }
+    }
 
     GPIO_IRQManager::init();
         // PushButton init
     PushButton changeModePushButton;
     changeModePushButton.settings = {
         .debounceTime_us    = PUSH_BUTTON_DEBOUNCE_TIME_us,
-        .onDown             = changeModeCallback,
+        .onDown             = nullptr,
         .onDownEnabled      = false,
-        .onUp               = changeModeCallback,
+        .onUp               = encSwUpCallback,
         .onUpEnabled        = true,
     };
     changeModePushButton.begin(PIN_PUSH_BUTTON_CHANGEMODE);
@@ -170,15 +252,30 @@ void core1_entry() {
         .onDecEnabled       = false,
     };
     alphaRotaryEncoder.begin(PIN_ROTARY_ENCODER_A, PIN_ROTARY_ENCODER_B);
+    alphaRotaryEncoder.setState(static_cast<int>(alpha * 100.0f + 0.5f));
 
-        // Circular buffer – stores int16_t bit-patterns in the low 16 bits of uint32_t.
+    // Waveform circular buffer
     static const int CIRCULAR_BUFFER_SIZE = 512;
     AudioSample_t circularBuffer[CIRCULAR_BUFFER_SIZE] = {0};
     int bufferWriteIndex = 0;
     uint32_t lastDisplayTime = 0;
     const uint32_t DISPLAY_INTERVAL_MS = 33; // ~30 fps
 
+    static bool     showSaveBanner  = false;
+    static uint32_t saveBannerStart = 0;
+
     while (true) {
+                // service deferred ISR flags
+        if(pendingModeChange){
+            pendingModeChange = false;
+            cycleMode();
+        }
+        if(flashSaveDone){
+            flashSaveDone   = false;
+            showSaveBanner  = true;
+            saveBannerStart = time_us_32() / 1000;
+        }
+
             // check alphaRotaryEncoder position
         int alphaRotaryEncoderPosition = alphaRotaryEncoder.getState();
         if (alphaRotaryEncoderPosition > ROTARY_ENCODER_MAX_POSITION) {
@@ -190,70 +287,64 @@ void core1_entry() {
             alphaRotaryEncoder.setState(ROTARY_ENCODER_MIN_POSITION);
         }
 
-        alpha = alphaRotaryEncoderPosition/100.0f;
+        alpha = alphaRotaryEncoderPosition / 100.0f;
 
             // Drain the inter-core queue
         AudioSample_t word;
-        while(queue_try_remove(&sharedQueue, &word)){
+        while (queue_try_remove(&sharedQueue, &word)){
             circularBuffer[bufferWriteIndex] = word;
             bufferWriteIndex = (bufferWriteIndex + 1) % CIRCULAR_BUFFER_SIZE;
         }
         uint32_t now = time_us_32() / 1000;
-        if(now - lastDisplayTime >= DISPLAY_INTERVAL_MS){
+        if (now - lastDisplayTime >= DISPLAY_INTERVAL_MS) {
             lastDisplayTime = now;
             oled.clearDisplay();
-            if(mode == Mode::FFT){
+            if (mode == Mode::FFT) {
                 fi16 fftIn[256];
-                for(int i = 0; i < 256; i++){
+                for (int i = 0; i < 256; i++){
                     fftIn[i] = (fi16)(int16_t)(uint16_t)circularBuffer[i].LC;
                 }
                 int32_t mean = 0;
-                for(int i = 0; i < 256; i++){ mean += fftIn[i];}
+                for (int i = 0; i < 256; i++) { mean += fftIn[i]; }
                 mean >>= 8;
-                for(int i = 0; i < 256; i++){ fftIn[i] -= (fi16)mean;}
+                for (int i = 0; i < 256; i++) { fftIn[i] -= (fi16)mean; }
                 fi16_32 fftOut[256];
                 fft_fixed(fftIn, fftOut);
                 fi16_32 fftOut_max = 1;
-                for(int i = 0; i < 128; i++){
+                for (int i = 0; i < 128; i++) {
                     if (fftOut[i] > fftOut_max) fftOut_max = fftOut[i];
                 }
-                bool max_gt_64k = fftOut_max > 65535;
-                uint32_t scale = max_gt_64k
-                                             ? (uint32_t)(fftOut_max / 65535 + 1)
-                                             : (uint32_t)(65535 / fftOut_max);
-
-                for(int x = 0; x < 128; x++){
+                bool     max_gt_64k = fftOut_max > 65535;
+                uint32_t scale      = max_gt_64k
+                    ? (uint32_t)(fftOut_max / 65535 + 1)
+                    : (uint32_t)(65535 / fftOut_max);
+                for (int x = 0; x < 128; x++) {
                     uint16_t dp = (uint16_t)(max_gt_64k
-                                                 ? (fftOut[x] / scale)
-                                                 : (fftOut[x] * scale));
+                        ? (fftOut[x] / scale)
+                        : (fftOut[x] * scale));
                     uint8_t y = 63 - (uint8_t)(dp >> 10);
                     for (int row = 63; row > (int)y; row--) {
                         oled.drawPixel(x, row, true);
                     }
                 }
             }
-            else{
-                for(int x = 0; x < 128; x++){
-                    if(x % 4 < 2){
-                        oled.drawPixel(x, 32, true);
-                    }
+            else {
+                for (int x = 0; x < 128; x++) {
+                    if (x % 4 < 2) oled.drawPixel(x, 32, true);
                 }
                 int lastY = 32;
-                for(int x = 0; x < 128; x++){
+                for (int x = 0; x < 128; x++) {
                     int bufIdx = (bufferWriteIndex + x * 4) % CIRCULAR_BUFFER_SIZE;
                     int16_t s = (int16_t)(uint16_t)circularBuffer[bufIdx].LC;
                     uint16_t offset_bin = (uint16_t)s ^ 0x8000u;
-                    uint8_t y = 63 - (uint8_t)(offset_bin >> 10);
-                    if(y > 63){
-                        y = 63;
-                    }
-                    if(x > 0){
+                    uint8_t  y          = 63 - (uint8_t)(offset_bin >> 10);
+                    if (y > 63) y = 63;
+                    if (x > 0) {
                         int diff = (int)y - lastY;
-                        if(diff > 0){
-                            for(int dy = lastY; dy <= (int)y; dy++)
+                        if (diff > 0) {
+                            for (int dy = lastY; dy <= (int)y; dy++)
                                 oled.drawPixel(x, dy, true);
-                        }
-                        else if (diff < 0) {
+                        } else if (diff < 0) {
                             for (int dy = lastY; dy >= (int)y; dy--)
                                 oled.drawPixel(x, dy, true);
                         }
@@ -265,15 +356,23 @@ void core1_entry() {
             oled.setTextSize(1);
             oled.setTextColor(true);
             oled.setCursor(0, 0);
-            switch(mode){
+            switch (mode) {
                 case Mode::FFT: oled.print("FFT"); break;
-                default:        oled.print(currentFilter->filter_name); break;    
+                default: oled.print(currentFilter->filter_name); break;
             }
-            if(mode != Mode::Pass && mode != Mode::FFT){
+            if (mode != Mode::Pass && mode != Mode::FFT) {
                 char buf[12];
                 snprintf(buf, sizeof(buf), "a=%.2f", (float)alpha);
                 oled.setCursor(128 - 6 * 6, 0);
                 oled.print(buf);
+            }
+            if (showSaveBanner) {
+                if (now - saveBannerStart < 1500) {
+                    oled.setCursor(36, 0);
+                    oled.print("SAVED");
+                } else {
+                    showSaveBanner = false;
+                }
             }
             oled.display();
         }
@@ -281,8 +380,7 @@ void core1_entry() {
     }
 }
 
-
-// CORE 0 (IO / FILTER) MAIN
+// CORE 0 – I/O + FILTER
 int main() {
     stdio_init_all();
 
@@ -293,6 +391,7 @@ int main() {
     // Inter-core queue: element = uint32_t holding an int16_t bit-pattern.
     queue_init(&sharedQueue, sizeof(AudioSample_t), 256);
     multicore_launch_core1(core1_entry);
+    multicore_fifo_pop_blocking();
 
     static I2S_Tx i2sTx;
     static const uint32_t Tx_reservedMemDepth = 64;
@@ -321,13 +420,26 @@ int main() {
     i2sTx.enable(true);
     i2sRx.enable(true);
 
-    // initialize filter
+    // initialize filter + mode
     currentFilter = &FILTER_PASS;
-    mode = Mode::Pass;
+    mode          = Mode::Pass;
 
     uint32_t downsampleCounter = 0;
 
-    while (true) {    
+    while(true){
+        if(pendingFlashSave){
+            pendingFlashSave = false;
+            // stop pio state machines to remove DREQ
+            i2sTx.pause();
+            i2sRx.pause();
+            float snapAlpha = alpha;
+            Mode  snapMode  = mode;
+            saveToFlash(snapAlpha, snapMode);
+            // resume PIO
+            i2sRx.resume();
+            i2sTx.resume();
+            flashSaveDone = true;
+        }
 
         AudioSample_t rxBuf[Rx_reservedMemDepth];
         AudioSample_t txBuf[Tx_reservedMemDepth];
@@ -341,7 +453,7 @@ int main() {
                     // do filter
                 float s_vol = fix_to_float(raw_sample);
                 float filtered_vol = call_filter(currentFilter, s_vol, alpha);
-                filtered_vol = clamp_f(-1.0f, filtered_vol, 1.0f);
+                filtered_vol       = clamp_f(-1.0f, filtered_vol, 1.0f);
                 int16_t out_sample = float_to_fix(filtered_vol);
                     // output sample
                 AudioSample_t tx_word {
@@ -350,6 +462,7 @@ int main() {
                 };
                 queuedValid = i2sTx.queue(tx_word) & queuedValid;
 
+                // Downsample for display
                 downsampleCounter++;
                 if (downsampleCounter >= DOWNSAMPLE_FACTOR) {
                     downsampleCounter = 0;
