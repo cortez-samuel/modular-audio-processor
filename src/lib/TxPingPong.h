@@ -10,7 +10,6 @@
 #include <cstdio>
 
 class TxPingPong {
-public:
     static inline TxPingPong* __dmaMap[12];
 
     struct DataBuffer_t {

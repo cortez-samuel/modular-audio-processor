@@ -26,7 +26,7 @@ int main() {
     gpio_set_dir(pin13, GPIO_OUT);
 
     static const uint8_t depth = 8;
-    uint32_t reserved[RxPingPong::WIDTH * depth];
+    AudioSample_t reserved[RxPingPong::WIDTH * depth];
     I2S_Rx i2sRx;
     i2sRx.settings = {
         .i2sSettings = I2S_Rx::defaultSettings.i2sSettings,
@@ -52,7 +52,7 @@ int main() {
     i2sRx.enable(true);
 
 
-    uint32_t buff[depth];
+    AudioSample_t buff[depth];
     while(1) {
         //stdio_printf("%u\n", i++);
         //bool valid = ppb.read(buff);
@@ -62,8 +62,8 @@ int main() {
 
         if (valid) {
             printf("----- %u\n", i2sRx.getOverflow());
-            for (uint i = 0; i < depth/2; i++) {
-                printf("LC 0x%02x  RC 0x%02x\n", buff[2*i], buff[2*i+1]);
+            for (uint i = 0; i < depth; i++) {
+                printf("LC 0x%02x  |  RC 0x%02x\n", buff[i].LC, buff[i].RC);
             }
         }
     }

@@ -6,6 +6,7 @@
 #include "pico/multicore.h"
 #include "pico/util/queue.h"
 
+#include "../lib/AudioSample.hpp"
 #include "../lib/I2S.h"
 #include "../lib/oled.h"
 #include "../lib/adc.hpp"
@@ -27,29 +28,20 @@ static const uint8_t PIN_DC         = 29;
 static const uint8_t PIN_CS         = 24;
 
     // SHARED STUFF
-static volatile uint8_t DOWNSAMPLE_FACTOR   = 16;
-static const uint8_t    SHARED_BUFFER_WIDTH = 64;
-static const uint8_t    SHARED_BUFFER_DEPTH = 128;
+static const uint8_t DOWNSAMPLE_FACTOR   = 16;
+static const uint8_t SHARED_BUFFER_WIDTH = 64;
+static const uint8_t SHARED_BUFFER_DEPTH = 128;
 static queue_t sharedQueue;
 
     // I2S Tx
 static const uint8_t PIN_I2S_Tx_SD = 0;
 static const uint8_t PIN_I2S_Tx_BCLK = 2;
 static const uint8_t PIN_I2S_Tx_WS = 3;
-static I2S_Tx i2sTx;
-static const uint32_t Tx_reservedMemDepth = 128;
-static const uint32_t Tx_reservedMemWidth = 8;
-static uint32_t Tx_reservedMem[Tx_reservedMemDepth * Tx_reservedMemWidth];
-static uint32_t Tx_defaultMem[Tx_reservedMemDepth];
 
     // I2S Rx
 static const uint8_t PIN_I2S_Rx_SD   = 7;
 static const uint8_t PIN_I2S_Rx_BCLK = 8;
 static const uint8_t PIN_I2S_Rx_WS   = 9;
-static I2S_Rx i2sRx;
-static const uint32_t Rx_reservedMemDepth = 128;
-static uint32_t Rx_reservedMem[Rx_reservedMemDepth * RxPingPong::WIDTH];
-
 
     // I2S GENERAL
 static const uint  I2S_WS_FRAME_WIDTH = 16;
@@ -162,9 +154,9 @@ void core1_entry() {
     changeModePushButton.settings = {
         .debounceTime_us    = PUSH_BUTTON_DEBOUNCE_TIME_us,
         .onDown             = changeModeCallback,
-        .onDownEnabled      = true,
-        .onUp               = nullptr,
-        .onUpEnabled        = false,
+        .onDownEnabled      = false,
+        .onUp               = changeModeCallback,
+        .onUpEnabled        = true,
     };
     changeModePushButton.begin(PIN_PUSH_BUTTON_CHANGEMODE);
 
@@ -181,7 +173,7 @@ void core1_entry() {
 
         // Circular buffer – stores int16_t bit-patterns in the low 16 bits of uint32_t.
     static const int CIRCULAR_BUFFER_SIZE = 512;
-    uint32_t circularBuffer[CIRCULAR_BUFFER_SIZE] = {0};
+    AudioSample_t circularBuffer[CIRCULAR_BUFFER_SIZE] = {0};
     int bufferWriteIndex = 0;
     uint32_t lastDisplayTime = 0;
     const uint32_t DISPLAY_INTERVAL_MS = 33; // ~30 fps
@@ -201,7 +193,7 @@ void core1_entry() {
         alpha = alphaRotaryEncoderPosition/100.0f;
 
             // Drain the inter-core queue
-        uint32_t word;
+        AudioSample_t word;
         while(queue_try_remove(&sharedQueue, &word)){
             circularBuffer[bufferWriteIndex] = word;
             bufferWriteIndex = (bufferWriteIndex + 1) % CIRCULAR_BUFFER_SIZE;
@@ -213,7 +205,7 @@ void core1_entry() {
             if(mode == Mode::FFT){
                 fi16 fftIn[256];
                 for(int i = 0; i < 256; i++){
-                    fftIn[i] = (fi16)(int16_t)(uint16_t)circularBuffer[i];
+                    fftIn[i] = (fi16)(int16_t)(uint16_t)circularBuffer[i].LC;
                 }
                 int32_t mean = 0;
                 for(int i = 0; i < 256; i++){ mean += fftIn[i];}
@@ -249,7 +241,7 @@ void core1_entry() {
                 int lastY = 32;
                 for(int x = 0; x < 128; x++){
                     int bufIdx = (bufferWriteIndex + x * 4) % CIRCULAR_BUFFER_SIZE;
-                    int16_t s = (int16_t)(uint16_t)circularBuffer[bufIdx];
+                    int16_t s = (int16_t)(uint16_t)circularBuffer[bufIdx].LC;
                     uint16_t offset_bin = (uint16_t)s ^ 0x8000u;
                     uint8_t y = 63 - (uint8_t)(offset_bin >> 10);
                     if(y > 63){
@@ -299,9 +291,14 @@ int main() {
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
     // Inter-core queue: element = uint32_t holding an int16_t bit-pattern.
-    queue_init(&sharedQueue, sizeof(uint32_t), 256);
+    queue_init(&sharedQueue, sizeof(AudioSample_t), 256);
     multicore_launch_core1(core1_entry);
 
+    static I2S_Tx i2sTx;
+    static const uint32_t Tx_reservedMemDepth = 64;
+    static const uint32_t Tx_reservedMemWidth = 8;
+    static AudioSample_t Tx_reservedMem[Tx_reservedMemDepth * Tx_reservedMemWidth];
+    static AudioSample_t Tx_defaultMem[Tx_reservedMemDepth] = {0};
     i2sTx.settings = {
         .i2sSettings    = I2S_Tx::defaultSettings.i2sSettings,
         .bufferWidth    = Tx_reservedMemWidth,
@@ -311,6 +308,9 @@ int main() {
     };
     i2sTx.init(PIN_I2S_Tx_BCLK, PIN_I2S_Tx_WS, PIN_I2S_Tx_SD);
 
+    static I2S_Rx i2sRx;
+    static const uint32_t Rx_reservedMemDepth = 64;
+    static AudioSample_t Rx_reservedMem[Rx_reservedMemDepth * RxPingPong::WIDTH];
     i2sRx.settings = {
         .i2sSettings    = I2S_Rx::defaultSettings.i2sSettings,
         .bufferDepth    = Rx_reservedMemDepth,
@@ -329,14 +329,14 @@ int main() {
 
     while (true) {    
 
-        uint32_t rxBuf[Rx_reservedMemDepth];
-        uint32_t txBuf[Tx_reservedMemDepth];
+        AudioSample_t rxBuf[Rx_reservedMemDepth];
+        AudioSample_t txBuf[Tx_reservedMemDepth];
         if (i2sRx.readBuffer(rxBuf)) {
             bool queuedValid = true;
-            for (uint i = 0; i < Rx_reservedMemDepth/2; i++) {
+            for (uint i = 0; i < Rx_reservedMemDepth; i++) {
                     // get sample
-                int16_t raw_sample_LC = (int16_t)(uint16_t)rxBuf[2*i];
-                int16_t raw_sample_RC = (int16_t)(uint16_t)rxBuf[2*i+1];
+                int16_t raw_sample_LC = (int16_t)(uint16_t)rxBuf[i].LC;
+                int16_t raw_sample_RC = (int16_t)(uint16_t)rxBuf[i].RC;
                 int16_t raw_sample = (raw_sample_LC >> 1) + (raw_sample_RC >> 1);
                     // do filter
                 float s_vol = fix_to_float(raw_sample);
@@ -344,14 +344,16 @@ int main() {
                 filtered_vol = clamp_f(-1.0f, filtered_vol, 1.0f);
                 int16_t out_sample = float_to_fix(filtered_vol);
                     // output sample
-                uint32_t tx_word = (uint32_t)(uint16_t)out_sample;
-                queuedValid = i2sTx.queue(tx_word, tx_word) & queuedValid;
+                AudioSample_t tx_word {
+                    (uint32_t)(uint16_t)out_sample,
+                    (uint32_t)(uint16_t)out_sample,
+                };
+                queuedValid = i2sTx.queue(tx_word) & queuedValid;
 
                 downsampleCounter++;
                 if (downsampleCounter >= DOWNSAMPLE_FACTOR) {
                     downsampleCounter = 0;
-                    uint32_t q_word = (uint32_t)(uint16_t)out_sample;
-                    queue_try_add(&sharedQueue, &q_word);
+                    queue_try_add(&sharedQueue, &tx_word);
                 }
             }
         }

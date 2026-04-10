@@ -8,6 +8,7 @@
 
 #include "RxPingPong.h"
 #include "TxPingPong.h"
+#include "AudioSample.hpp"
 
 #include "I2S_Tx_naive.pio.h"
 #include "I2S_Tx_compact.pio.h"
@@ -41,8 +42,8 @@ public:
         I2SSettings_t i2sSettings;
         uint32_t bufferWidth;
         uint32_t bufferDepth;
-        uint32_t* reservedMem;
-        uint32_t* defaultMem;
+        AudioSample_t* reservedMem;
+        AudioSample_t* defaultMem;
     };
 
     inline static constexpr Settings_t defaultSettings {
@@ -84,19 +85,27 @@ public:
     void enable(bool start);
 
 public:
-    inline bool queue(uint32_t LC, uint32_t RC) {
+    inline bool queue(AudioSample_t sample) {
         bool LC_valid, RC_valid;
         
-        LC_valid = txPingPong.queue(LC, settings.i2sSettings.frameSize);
-        RC_valid = txPingPong.queue(RC, settings.i2sSettings.frameSize);
+        LC_valid = txPingPong.queue(sample.LC, settings.i2sSettings.frameSize);
+        RC_valid = txPingPong.queue(sample.RC, settings.i2sSettings.frameSize);
         return LC_valid && RC_valid;
     }
-    inline void queueBlocking(uint32_t LC, uint32_t RC) {
-        txPingPong.queueBlocking(LC, settings.i2sSettings.frameSize);
-        txPingPong.queueBlocking(RC, settings.i2sSettings.frameSize);
+    inline void queueBlocking(AudioSample_t sample) {
+        txPingPong.queueBlocking(sample.LC, settings.i2sSettings.frameSize);
+        txPingPong.queueBlocking(sample.RC, settings.i2sSettings.frameSize);
     }
-    inline bool queueBuffer(uint32_t* buff) {
-        return txPingPong.queueBuffer(buff, settings.i2sSettings.frameSize);
+    inline bool queueBuffer(AudioSample_t* in) {
+        return txPingPong.queueBuffer((uint32_t*)in, settings.i2sSettings.frameSize);
+    }
+
+public:
+    inline bool getUnderflow() const {
+        return txPingPong.underflow();
+    }
+    inline void clearUnderflow() {
+        txPingPong.clearUnderflow();
     }
 };
 
@@ -108,7 +117,7 @@ public:
     struct Settings_t {
         I2SSettings_t i2sSettings;
         uint32_t bufferDepth;
-        uint32_t* reservedMem;
+        AudioSample_t* reservedMem;
     };
 
     inline static constexpr Settings_t defaultSettings {
@@ -137,12 +146,12 @@ public:
     void enable(bool start);
 
 public:
-    inline bool read(uint32_t& LC, uint32_t& RC) {
-        bool valid = rxPingPong.read(&LC); rxPingPong.read(&RC);
+    inline bool read(AudioSample_t& sample) {
+        bool valid = rxPingPong.read(&sample.LC); rxPingPong.read(&sample.RC);
         return valid;
     }
-    inline bool readBuffer(uint32_t* out) {
-        return rxPingPong.readBuffer(out);
+    inline bool readBuffer(AudioSample_t* out) {
+        return rxPingPong.readBuffer((uint32_t*)out);
     }
 
 public:

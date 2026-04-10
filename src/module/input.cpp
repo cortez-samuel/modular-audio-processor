@@ -51,11 +51,11 @@ int main() {
     ADC::init(0);
 
         // I2S_Tx INIT
-    const uint Tx_reservedMemDepth = 128;
-    const uint Tx_reservedMemWidth = 8;
-    uint32_t Tx_reservedMem[Tx_reservedMemDepth * Tx_reservedMemWidth];
-    uint32_t Tx_defaultMem[Tx_reservedMemDepth] = {0};
-    I2S_Tx i2sTx;
+    static I2S_Tx i2sTx;
+    static const uint Tx_reservedMemDepth = 64;
+    static const uint Tx_reservedMemWidth = 8;
+    static AudioSample_t Tx_reservedMem[Tx_reservedMemDepth * Tx_reservedMemWidth];
+    static AudioSample_t Tx_defaultMem[Tx_reservedMemDepth] = {0};
     i2sTx.settings = {
         .i2sSettings    = I2S_Tx::defaultSettings.i2sSettings,
         .bufferWidth    = Tx_reservedMemWidth,
@@ -76,9 +76,12 @@ int main() {
     while (true) {
         if (adc0.newValue()) {
             lastSample = adc_raw_to_fix(adc0.getRaw());
-            uint32_t word = (uint32_t)(uint16_t)lastSample;
+            AudioSample_t word = { (
+                uint32_t)(uint16_t)lastSample, 
+                (uint32_t)(uint16_t)lastSample 
+            };
             bool queued = false;
-            while(!queued) { queued = i2sTx.queue(word, word); }
+            while(!queued) { queued = i2sTx.queue(word); }
         }
     }
 }

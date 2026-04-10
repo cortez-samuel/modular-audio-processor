@@ -11,7 +11,10 @@ I2S_Tx::I2S_Tx() : settings(defaultSettings) {
 
 void I2S_Tx::enable(bool start) {
     if (start) {
-        txPingPong.setReservedSpace(settings.reservedMem, settings.defaultMem, settings.bufferWidth, settings.bufferDepth);
+        txPingPong.setReservedSpace(
+            (uint32_t*)settings.reservedMem, (uint32_t*)settings.defaultMem, 
+            settings.bufferWidth, settings.bufferDepth * 2
+        );
         txPingPong.begin(pio, sm);
         pio_sm_set_enabled(pio, sm, true);
     }
@@ -30,9 +33,13 @@ I2S_Rx::I2S_Rx() :
 
 bool I2S_Rx::init(uint BCLK_pin, uint WS_pin, uint SD_pin) {
     #if     I2S_RX_PROGRAM == I2S_RX_PROGRAM__NAIVE
-        I2S_Rx_naive_init(pio, sm, offset, BCLK_pin, WS_pin, SD_pin, fs, WS_frame_size);
+        I2S_Rx_naive_init(pio, sm, offset, BCLK_pin, WS_pin, SD_pin, 
+            settings.i2sSettings.fs, settings.i2sSettings.frameSize
+        );
     #elif   I2S_RX_PROGRAM == I2S_RX_PROGRAM__AUTOFRAME
-        I2S_Rx_autoFrame_init(pio, sm, offset, BCLK_pin, WS_pin, SD_pin, settings.i2sSettings.fs, settings.i2sSettings.frameSize);
+        I2S_Rx_autoFrame_init(pio, sm, offset, BCLK_pin, WS_pin, SD_pin, 
+            settings.i2sSettings.fs, settings.i2sSettings.frameSize
+        );
     #endif
 
     return true;
@@ -40,7 +47,10 @@ bool I2S_Rx::init(uint BCLK_pin, uint WS_pin, uint SD_pin) {
 
 void I2S_Rx::enable(bool start) {
     if (start) {
-        rxPingPong.setReservedSpace(settings.reservedMem, settings.bufferDepth);
+        rxPingPong.setReservedSpace(
+            (uint32_t*)settings.reservedMem, 
+            settings.bufferDepth * 2
+        );
         rxPingPong.begin(pio, sm);
         pio_sm_set_enabled(pio, sm, true);
     }

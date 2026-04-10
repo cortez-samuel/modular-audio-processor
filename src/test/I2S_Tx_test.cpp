@@ -22,10 +22,10 @@ int main() {
 
     static const uint8_t width = 8;
     static const uint32_t depth = 32;
-    uint32_t reservedMem[width * depth];
-    uint32_t defaultDataSpace[depth];
-    uint32_t defaultData[depth];
-    for (int i = 0; i < depth; i++) { defaultData[i] = 0x10001111; }
+    AudioSample_t reservedMem[width * depth];
+    AudioSample_t defaultDataSpace[depth];
+    AudioSample_t defaultData[depth];
+    for (int i = 0; i < depth; i++) { defaultData[i] = {  0x01234567, 0x10001111 }; }
 
     printf("2\n");
 
@@ -60,10 +60,10 @@ int main() {
     txPingPong._printdetails();
     */
 
-    uint32_t buff1[depth], buff2[depth];
+    AudioSample_t buff1[depth], buff2[depth];
 
     for (uint i = 0; i < depth; i++) {
-        buff1[i] = i;
+        buff1[i] = {i ^ 0b11, i};
     }
 
     bool pin13 = 1;
