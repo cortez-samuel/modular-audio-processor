@@ -111,6 +111,8 @@ static volatile uint64_t encSwPressStart_us      = 0;          // set in onDown 
     // flags set inside ISR, consumed by core1 main loop
 static volatile bool pendingModeChange  = false;
 static volatile bool pendingFlashSave   = false;
+// set by Core 0 after it finishes the flash write; consumed by Core 1 to show the banner
+static volatile bool flashSaveDone      = false;
 
 #define FEATHER_RP2040_FLASH_SIZE   (8u * 1024u * 1024u)   // 8 MB
 #define FLASH_MAGIC         0xA55A1234u
@@ -206,6 +208,9 @@ static void encSwUpCallback(
 
 // CORE 1 – OLED DISPLAY + INPUT HANDLING
 void core1_entry() {
+    flash_safe_execute_core_init();
+    multicore_fifo_push_blocking(0);
+
     // Initialize OLED
     gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
     gpio_set_function(PIN_TX,  GPIO_FUNC_SPI);
@@ -227,7 +232,7 @@ void core1_entry() {
     oled.display();
     sleep_ms(2000);
 
-    // load saved state from flash (or use defaults)
+    // load saved state from flash
     {
         float   savedAlpha = 1.0f;          // default: 1.00
         Mode    savedMode  = Mode::Pass;    // default: SRC
@@ -254,8 +259,8 @@ void core1_entry() {
 
     // Rotary encoder switch (short press = mode, long press = save)
     PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us> encSwPushButton;
-    encSwPushButton.setCallback(encSwDownCallback, false, true);    // onDown → record time
-    encSwPushButton.setCallback(encSwUpCallback,   true,  true);    // onUp   → decide action
+    encSwPushButton.setCallback(encSwDownCallback, false, true);    // onDown -> record time
+    encSwPushButton.setCallback(encSwUpCallback,   true,  true);    // onUp   -> decide action
     encSwPushButton.begin(PIN_ROTARY_ENCODER_SW);
 
     // Rotary encoder (turning adjusts alpha)
@@ -268,22 +273,19 @@ void core1_entry() {
     uint32_t circularBuffer[CIRCULAR_BUFFER_SIZE] = {0};
     int      bufferWriteIndex = 0;
     uint32_t lastDisplayTime  = 0;
-    const uint32_t DISPLAY_INTERVAL_MS = 33;    // ~30 fps
+    const uint32_t DISPLAY_INTERVAL_MS = 33;
 
     static bool     showSaveBanner  = false;
     static uint32_t saveBannerStart = 0;
 
-    while (true) {
+    while(true){
         // service deferred ISR flags
-        if (pendingModeChange) {
+        if(pendingModeChange){
             pendingModeChange = false;
             cycleMode();
         }
-        if (pendingFlashSave) {
-            pendingFlashSave = false;
-            float   snapAlpha = alpha;
-            Mode    snapMode  = mode;
-            saveToFlash(snapAlpha, snapMode);
+        if(flashSaveDone){
+            flashSaveDone   = false;
             showSaveBanner  = true;
             saveBannerStart = time_us_32() / 1000;
         }
@@ -308,12 +310,10 @@ void core1_entry() {
             circularBuffer[bufferWriteIndex] = word;
             bufferWriteIndex = (bufferWriteIndex + 1) % CIRCULAR_BUFFER_SIZE;
         }
-
         uint32_t now = time_us_32() / 1000;
         if (now - lastDisplayTime >= DISPLAY_INTERVAL_MS) {
             lastDisplayTime = now;
             oled.clearDisplay();
-
             if (mode == Mode::FFT) {
                 fi16 fftIn[256];
                 for (int i = 0; i < 256; i++) {
@@ -406,9 +406,8 @@ int main() {
     // Inter-core queue
     queue_init(&sharedQueue, sizeof(uint32_t), 256);
 
-    flash_safe_execute_core_init();
     multicore_launch_core1(core1_entry);
-
+    multicore_fifo_pop_blocking();
     i2sTx.setReservedMem(Tx_reservedMem, Tx_defaultMem, Tx_reservedMemWidth, Tx_reservedMemDepth);
     i2sTx.init(PIN_I2S_Tx_BCLK, PIN_I2S_Tx_WS, PIN_I2S_Tx_SD, fs, I2S_WS_FRAME_WIDTH);
     i2sRx.setReservedMem(Rx_reservedMem, Rx_reservedMemDepth);
@@ -416,15 +415,29 @@ int main() {
     i2sTx.enable(true);
     i2sRx.enable(true);
 
-    // Initialize filter + mode
+    // initialize filter + mode
     currentFilter = &FILTER_PASS;
     mode          = Mode::Pass;
 
     uint32_t downsampleCounter = 0;
 
-    while (true) {
+    while(true){
+        if(pendingFlashSave){
+            pendingFlashSave = false;
+            // stop pio state machines to remove DREQ
+            i2sTx.pause();
+            i2sRx.pause();
+            float snapAlpha = alpha;
+            Mode  snapMode  = mode;
+            saveToFlash(snapAlpha, snapMode);
+            // resume PIO
+            i2sRx.resume();
+            i2sTx.resume();
+            flashSaveDone = true;
+        }
+
         uint32_t rxBuf[Rx_reservedMemDepth];
-        if (i2sRx.readBuffer(rxBuf)) {
+        if(i2sRx.readBuffer(rxBuf)){
             bool queuedValid = true;
             for (uint i = 0; i < Rx_reservedMemDepth / 2; i++) {
                 // Get stereo sample and mix to mono

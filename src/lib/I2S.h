@@ -60,6 +60,10 @@ public:
     }
     void enable(bool start);
 
+    // temp stop pio state machine w/o touching dma channel config
+    inline void pause()  { pio_sm_set_enabled(pio, sm, false); }
+    inline void resume() { pio_sm_set_enabled(pio, sm, true);  }
+
 public:
     inline bool queue(uint32_t LC, uint32_t RC) {
         bool LC_valid, RC_valid;
@@ -97,6 +101,9 @@ public:
     void setReservedMem(uint32_t* reservedMem, uint8_t depth);
     bool init(uint BCLK_pin, uint WS_pin, uint SD_pin, float fs, uint WS_frame_size);
     void enable(bool start);
+
+    inline void pause()  { pio_sm_set_enabled(pio, sm, false); }
+    inline void resume() { pio_sm_set_enabled(pio, sm, true);  }
 
 public:
     inline bool read(uint32_t& LC, uint32_t& RC) {
