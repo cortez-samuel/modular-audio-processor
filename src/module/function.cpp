@@ -93,25 +93,31 @@ enum class Mode {
 };
 static Mode mode = Mode::Pass;      // default: SRC / Pass
 
-static const uint8_t  PIN_PUSH_BUTTON_CHANGEMODE    = 12;
 static const uint64_t PUSH_BUTTON_DEBOUNCE_TIME_us  = 50000;
 
-    // ROTARY ENCODER
-static const uint8_t  PIN_ROTARY_ENCODER_A              = 1;
-static const uint8_t  PIN_ROTARY_ENCODER_B              = 6;
-static const uint8_t  PIN_ROTARY_ENCODER_SW             = 20;
+    // MODE ROTARY ENCODER  — turning cycles mode, pressing resets to SRC
+static const uint8_t  PIN_MODE_ENCODER_A             = 12;
+static const uint8_t  PIN_MODE_ENCODER_B             = 13;
+static const uint8_t  PIN_MODE_ENCODER_SW            = 25;
+
+    // ALPHA ROTARY ENCODER — turning adjusts alpha, pressing resets to 1.00
+static const uint8_t  PIN_ALPHA_ENCODER_A            = 1;
+static const uint8_t  PIN_ALPHA_ENCODER_B            = 6;
+static const uint8_t  PIN_ALPHA_ENCODER_SW           = 20;
+
 static const uint64_t ROTARY_ENCODER_DEBOUNCE_TIME_us   = 10000;
 static const uint8_t  ROTARY_ENCODER_MIN_POSITION       = 0;
 static const uint8_t  ROTARY_ENCODER_MAX_POSITION       = 100;
 
-    // ROTARY ENCODER PUSH-SWITCH – press timing
-static const uint64_t LONG_PRESS_THRESHOLD_us   = 1000000;     // 1 second: long press
-
     // flags set inside ISR, consumed by core1 main loop
-static volatile bool pendingModeChange  = false;
+static volatile bool pendingModeChange  = false;    // advance mode (positive turn)
+static volatile bool pendingModeReverse = false;    // retreat mode (negative turn)
+static volatile bool pendingModeReset   = false;    // reset mode to SRC (SW press)
+static volatile bool pendingAlphaReset  = false;    // reset alpha to 1.00 (SW press)
 static volatile bool pendingFlashSave   = false;
-// set by Core 0 after it finishes the flash write; consumed by Core 1 to show the banner
 static volatile bool flashSaveDone      = false;
+static volatile float    lastSavedAlpha = -1.0f;   // sentinel: forces first save
+static volatile uint32_t lastSavedMode  = 0xFFFFFFFFu;
 
 #define FEATHER_RP2040_FLASH_SIZE   (8u * 1024u * 1024u)   // 8 MB
 #define FLASH_MAGIC         0xA55A1234u
@@ -152,6 +158,7 @@ static bool loadFromFlash(float& outAlpha, Mode& outMode) {
     return true;
 }
 
+// Advance mode: Pass -> LPF -> HPF -> FFT -> Pass
 static inline void cycleMode() {
     switch (mode) {
         case Mode::Pass:     mode = Mode::Lowpass;  currentFilter = &FILTER_LPF;  break;
@@ -159,6 +166,22 @@ static inline void cycleMode() {
         case Mode::Highpass: mode = Mode::FFT;      currentFilter = &FILTER_PASS; break;
         case Mode::FFT:      mode = Mode::Pass;     currentFilter = &FILTER_PASS; break;
     }
+}
+
+// Retreat mode: Pass -> FFT -> HPF -> LPF -> Pass
+static inline void reverseCycleMode() {
+    switch (mode) {
+        case Mode::Pass:     mode = Mode::FFT;      currentFilter = &FILTER_PASS; break;
+        case Mode::FFT:      mode = Mode::Highpass; currentFilter = &FILTER_HPF;  break;
+        case Mode::Highpass: mode = Mode::Lowpass;  currentFilter = &FILTER_LPF;  break;
+        case Mode::Lowpass:  mode = Mode::Pass;     currentFilter = &FILTER_PASS; break;
+    }
+}
+
+// Reset mode to default (SRC / Pass)
+static inline void resetMode() {
+    mode          = Mode::Pass;
+    currentFilter = &FILTER_PASS;
 }
 
 static const float _E_SCALE = 32768.0f;
@@ -175,26 +198,37 @@ static inline float clamp_f(float lo, float x, float hi) {
 }
 
 //  CALLBACKS
-static void changeModeCallback(
+
+// Mode encoder — positive turn: advance mode
+static void modeEncPosCallback(
+    RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us>* /*enc*/,
+    RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us>::State_t /*next*/)
+{
+    pendingModeChange = true;
+}
+
+// Mode encoder — negative turn: retreat mode
+static void modeEncNegCallback(
+    RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us>* /*enc*/,
+    RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us>::State_t /*next*/)
+{
+    pendingModeReverse = true;
+}
+
+// Mode encoder switch — press: reset mode to SRC
+static void modeEncSwUpCallback(
     PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>* /*pb*/,
     PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>::State_t /*next*/)
 {
-    cycleMode();
+    pendingModeReset = true;
 }
 
-// Rotary-encoder switch – onUp: decide short vs long press.
-static void encSwUpCallback(
-    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>* inst,
-    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>::State_t next)
+// Alpha encoder switch — press: reset alpha to 1.00
+static void alphaEncSwUpCallback(
+    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>* /*pb*/,
+    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>::State_t /*next*/)
 {
-    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us>::StateDetails_t details = inst->getStateDetails();
-    if (details.duration_us >= LONG_PRESS_THRESHOLD_us) {
-        // Long press -> save to flash (deferred to main loop)
-        pendingFlashSave = true;
-    } else {
-        // Short press -> cycle mode (deferred to main loop)
-        pendingModeChange = true;
-    }
+    pendingAlphaReset = true;
 }
 
 // CORE 1 – OLED DISPLAY + INPUT HANDLING
@@ -244,15 +278,26 @@ void core1_entry() {
 
     GPIO_IRQManager::init();
 
-    // Rotary encoder switch (short press = mode, long press = save)
-    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us> encSwPushButton;
-    encSwPushButton.setCallback(encSwUpCallback,   true,  true);    // onUp   -> decide action
-    encSwPushButton.begin(12);
+    // Mode rotary encoder — turning cycles mode forward/backward
+    RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us> modeRotaryEncoder;
+    modeRotaryEncoder.setCallback(modeEncPosCallback, false, true);  // positive turn
+    modeRotaryEncoder.setCallback(modeEncNegCallback, true,  true);  // negative turn
+    modeRotaryEncoder.begin(PIN_MODE_ENCODER_A, PIN_MODE_ENCODER_B);
 
-    // Rotary encoder (turning adjusts alpha)
+    // Mode encoder switch — press resets mode to SRC
+    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us> modeEncSwPushButton;
+    modeEncSwPushButton.setCallback(modeEncSwUpCallback, true, true);   // onUp
+    modeEncSwPushButton.begin(PIN_MODE_ENCODER_SW);
+
+    // Alpha rotary encoder — turning adjusts alpha value
     RotaryEncoder<ROTARY_ENCODER_DEBOUNCE_TIME_us> alphaRotaryEncoder;
-    alphaRotaryEncoder.begin(PIN_ROTARY_ENCODER_A, PIN_ROTARY_ENCODER_B);
+    alphaRotaryEncoder.begin(PIN_ALPHA_ENCODER_A, PIN_ALPHA_ENCODER_B);
     alphaRotaryEncoder.setState(static_cast<int>(alpha * 100.0f + 0.5f));
+
+    // Alpha encoder switch — press resets alpha to 1.00
+    PushButton<PUSH_BUTTON_DEBOUNCE_TIME_us> alphaEncSwPushButton;
+    alphaEncSwPushButton.setCallback(alphaEncSwUpCallback, true, true); // onUp
+    alphaEncSwPushButton.begin(PIN_ALPHA_ENCODER_SW);
 
     // Waveform circular buffer
     static const int CIRCULAR_BUFFER_SIZE = 512;
@@ -260,23 +305,46 @@ void core1_entry() {
     int      bufferWriteIndex = 0;
     uint32_t lastDisplayTime  = 0;
     const uint32_t DISPLAY_INTERVAL_MS = 33;
-
-    static bool     showSaveBanner  = false;
-    static uint32_t saveBannerStart = 0;
+    static uint32_t lastAutoSaveCheck_ms = 0;
 
     while(true){
         // service deferred ISR flags
-        if(pendingModeChange){
+        uint32_t now = time_us_32() / 1000;
+
+        if (pendingModeChange) {
             pendingModeChange = false;
             cycleMode();
         }
-        if(flashSaveDone){
-            flashSaveDone   = false;
-            showSaveBanner  = true;
-            saveBannerStart = time_us_32() / 1000;
+        if (pendingModeReverse) {
+            pendingModeReverse = false;
+            reverseCycleMode();
+        }
+        if (pendingModeReset) {
+            pendingModeReset = false;
+            resetMode();
+        }
+        if (pendingAlphaReset) {
+            pendingAlphaReset = false;
+            alpha = 1.0f;
+            alphaRotaryEncoder.setState(100);   // 1.00 * 100
+        }
+        if (flashSaveDone) {
+            flashSaveDone = false;
         }
 
-        // rotary encoder -> alpha
+        // PERIODIC AUTO-SAVE (every 2 seconds, only when state changed)
+        if (now - lastAutoSaveCheck_ms >= 2000) {
+            lastAutoSaveCheck_ms = now;
+            float    curAlpha = alpha;
+            uint32_t curMode  = static_cast<uint32_t>(mode);
+            if (curAlpha != lastSavedAlpha || curMode != lastSavedMode) {
+                lastSavedAlpha = curAlpha;
+                lastSavedMode  = curMode;
+                pendingFlashSave = true;
+            }
+        }
+
+        // alpha encoder -> alpha value (clamped to [0.00, 1.00])
         int encPosition = alphaRotaryEncoder.getState();
 
         if (encPosition > ROTARY_ENCODER_MAX_POSITION) {
@@ -296,7 +364,6 @@ void core1_entry() {
             circularBuffer[bufferWriteIndex] = word;
             bufferWriteIndex = (bufferWriteIndex + 1) % CIRCULAR_BUFFER_SIZE;
         }
-        uint32_t now = time_us_32() / 1000;
         if (now - lastDisplayTime >= DISPLAY_INTERVAL_MS) {
             lastDisplayTime = now;
             oled.clearDisplay();
@@ -366,14 +433,6 @@ void core1_entry() {
                 snprintf(buf, sizeof(buf), "a=%.2f", (float)alpha);
                 oled.setCursor(128 - 6 * 6, 0);
                 oled.print(buf);
-            }
-            if (showSaveBanner) {
-                if (now - saveBannerStart < 1500) {
-                    oled.setCursor(36, 0);
-                    oled.print("SAVED");
-                } else {
-                    showSaveBanner = false;
-                }
             }
             oled.display();
         }
