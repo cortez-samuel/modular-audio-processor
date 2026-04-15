@@ -9,13 +9,14 @@ typedef struct {
     FilterFunc_t filter;
 } Mode_t;
 
-enum class Mode : uint32_t { Pass = 0, Lowpass, Highpass, FFT };
+enum class Mode : uint32_t { Pass = 0, Lowpass, Highpass, Gain, FFT };
 
 static const uint32_t MODES_NUM = 5;
 static Mode_t MODES[MODES_NUM] = {
 	{ .name = "SRC",   .filter = Filters::PASS,               },
 	{ .name = "LPF",   .filter = Filters::FirstOrderIIR::LPF, },
 	{ .name = "HPF",   .filter = Filters::FirstOrderIIR::HPF, },
+	{ .name = "GAIN",  .filter = Filters::GAIN,               },
 	{ .name = "FFT",   .filter = Filters::PASS,               },
 };
 
