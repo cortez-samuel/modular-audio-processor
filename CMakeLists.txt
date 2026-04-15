@@ -54,6 +54,12 @@ pico_generate_pio_header(module_INPUT ${CMAKE_CURRENT_LIST_DIR}/src/lib/pio/I2S_
 pico_enable_stdio_uart(module_INPUT 0)
 pico_enable_stdio_usb(module_INPUT 1)
 
+target_compile_definitions(module_INPUT PRIVATE
+    CFG_TUSB_DEBUG=0
+    CFG_TUD_CDC_RX_BUFSIZE=256
+    CFG_TUD_CDC_TX_BUFSIZE=256
+)
+
 target_link_libraries(module_INPUT
     pico_stdlib
     hardware_pio
