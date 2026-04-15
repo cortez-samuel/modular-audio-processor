@@ -14,6 +14,7 @@
 #include "../lib/PushButton.hpp"
 #include "../lib/RotaryEncoder.hpp"
 #include "../lib/filters.h"
+#include "../lib/mode.h"
 
     // LED PIN
 static const uint LED_PIN           = 13;
@@ -64,34 +65,9 @@ static float buffer_X[FILTER_BUFFER_DEPTH];
 static float buffer_Y[FILTER_BUFFER_DEPTH];
 static CyclicBuffer_t<float> cyclicBuffer_X(buffer_X, FILTER_BUFFER_DEPTH);
 static CyclicBuffer_t<float> cyclicBuffer_Y(buffer_Y, FILTER_BUFFER_DEPTH);
-static FilterInstance_t* currentFilter  = nullptr;
 
-static FilterInstance_t FILTER_PASS {
-    .filter_name    = "SRC",
-    .filter         = Filters::PASS,
-    .x              = &cyclicBuffer_X,
-    .y              = &cyclicBuffer_Y,
-};
-static FilterInstance_t FILTER_LPF {
-    .filter_name    = "LPF",
-    .filter         = Filters::FirstOrderIIR::LPF,
-    .x              = &cyclicBuffer_X,
-    .y              = &cyclicBuffer_Y,
-};
-static FilterInstance_t FILTER_HPF {
-    .filter_name    = "HPF",
-    .filter         = Filters::FirstOrderIIR::HPF,
-    .x              = &cyclicBuffer_X,
-    .y              = &cyclicBuffer_Y,
-};
-
-enum class Mode { 
-    Pass, 
-    Lowpass, 
-    Highpass, 
-    FFT 
-};
-static Mode mode = Mode::Pass;      // default: SRC / Pass
+static Mode g_mode = Mode::Pass;      // default: SRC / Pass
+#define MODE_DEF(m) (MODES[mode_to_u32(m)])
 
 static const uint64_t PUSH_BUTTON_DEBOUNCE_TIME_us  = 50000;
 
@@ -143,7 +119,7 @@ static void saveToFlash(float a, Mode m) {
     static FlashData data;          // static so it stays alive inside the callback
     data.magic = FLASH_MAGIC;
     data.alpha = a;
-    data.mode  = static_cast<uint32_t>(m);
+    data.mode  = mode_to_u32(m);
     // flash_safe_execute pauses the other core so both aren't executing from flash
     flash_safe_execute(flashWriteCallback, &data, UINT32_MAX);
 }
@@ -156,32 +132,6 @@ static bool loadFromFlash(float& outAlpha, Mode& outMode) {
     outAlpha = d->alpha;
     outMode  = static_cast<Mode>(d->mode);
     return true;
-}
-
-// Advance mode: Pass -> LPF -> HPF -> FFT -> Pass
-static inline void cycleMode() {
-    switch (mode) {
-        case Mode::Pass:     mode = Mode::Lowpass;  currentFilter = &FILTER_LPF;  break;
-        case Mode::Lowpass:  mode = Mode::Highpass; currentFilter = &FILTER_HPF;  break;
-        case Mode::Highpass: mode = Mode::FFT;      currentFilter = &FILTER_PASS; break;
-        case Mode::FFT:      mode = Mode::Pass;     currentFilter = &FILTER_PASS; break;
-    }
-}
-
-// Retreat mode: Pass -> FFT -> HPF -> LPF -> Pass
-static inline void reverseCycleMode() {
-    switch (mode) {
-        case Mode::Pass:     mode = Mode::FFT;      currentFilter = &FILTER_PASS; break;
-        case Mode::FFT:      mode = Mode::Highpass; currentFilter = &FILTER_HPF;  break;
-        case Mode::Highpass: mode = Mode::Lowpass;  currentFilter = &FILTER_LPF;  break;
-        case Mode::Lowpass:  mode = Mode::Pass;     currentFilter = &FILTER_PASS; break;
-    }
-}
-
-// Reset mode to default (SRC / Pass)
-static inline void resetMode() {
-    mode          = Mode::Pass;
-    currentFilter = &FILTER_PASS;
 }
 
 static const float _E_SCALE = 32768.0f;
@@ -267,13 +217,7 @@ void core1_entry() {
         }
 
         alpha = savedAlpha;
-        mode  = savedMode;
-        switch (mode) {
-            case Mode::Pass:     currentFilter = &FILTER_PASS; break;
-            case Mode::Lowpass:  currentFilter = &FILTER_LPF;  break;
-            case Mode::Highpass: currentFilter = &FILTER_HPF;  break;
-            case Mode::FFT:      currentFilter = &FILTER_PASS; break;
-        }
+        g_mode  = savedMode;
     }
 
     GPIO_IRQManager::init();
@@ -313,15 +257,15 @@ void core1_entry() {
 
         if (pendingModeChange) {
             pendingModeChange = false;
-            cycleMode();
+            g_mode = mode_cycle(g_mode);
         }
         if (pendingModeReverse) {
             pendingModeReverse = false;
-            reverseCycleMode();
+            g_mode = mode_cycle_rev(g_mode);
         }
         if (pendingModeReset) {
             pendingModeReset = false;
-            resetMode();
+            g_mode = mode_default();
         }
         if (pendingAlphaReset) {
             pendingAlphaReset = false;
@@ -336,7 +280,7 @@ void core1_entry() {
         if (now - lastAutoSaveCheck_ms >= 2000) {
             lastAutoSaveCheck_ms = now;
             float    curAlpha = alpha;
-            uint32_t curMode  = static_cast<uint32_t>(mode);
+            uint32_t curMode  = static_cast<uint32_t>(g_mode);
             if (curAlpha != lastSavedAlpha || curMode != lastSavedMode) {
                 lastSavedAlpha = curAlpha;
                 lastSavedMode  = curMode;
@@ -367,7 +311,7 @@ void core1_entry() {
         if (now - lastDisplayTime >= DISPLAY_INTERVAL_MS) {
             lastDisplayTime = now;
             oled.clearDisplay();
-            if (mode == Mode::FFT) {
+            if (g_mode == Mode::FFT) {
                 fi16 fftIn[256];
                 for (int i = 0; i < 256; i++) {
                     fftIn[i] = (fi16)(int16_t)(uint16_t)circularBuffer[i];
@@ -424,11 +368,8 @@ void core1_entry() {
             oled.setTextSize(1);
             oled.setTextColor(true);
             oled.setCursor(0, 0);
-            switch (mode) {
-                case Mode::FFT: oled.print("FFT"); break;
-                default: oled.print(currentFilter->filter_name); break;
-            }
-            if (mode != Mode::Pass && mode != Mode::FFT) {
+            oled.print(MODE_DEF(g_mode).name);
+            if (MODE_DEF(g_mode).filter != Filters::PASS) {
                 char buf[12];
                 snprintf(buf, sizeof(buf), "a=%.2f", (float)alpha);
                 oled.setCursor(128 - 6 * 6, 0);
@@ -461,8 +402,7 @@ int main() {
     i2sRx.enable(true);
 
     // initialize filter + mode
-    currentFilter = &FILTER_PASS;
-    mode          = Mode::Pass;
+    g_mode          = Mode::Pass;
 
     uint32_t downsampleCounter = 0;
 
@@ -473,7 +413,7 @@ int main() {
             i2sTx.pause();
             i2sRx.pause();
             float snapAlpha = alpha;
-            Mode  snapMode  = mode;
+            Mode  snapMode  = g_mode;
             saveToFlash(snapAlpha, snapMode);
             // resume PIO
             i2sRx.resume();
@@ -492,7 +432,7 @@ int main() {
 
                 // Apply active filter
                 float s_vol        = fix_to_float(raw_sample);
-                float filtered_vol = call_filter(currentFilter, s_vol, alpha);
+                float filtered_vol = call_filter(g_mode, &cyclicBuffer_X, &cyclicBuffer_Y, s_vol, alpha);
                 filtered_vol       = clamp_f(-1.0f, filtered_vol, 1.0f);
                 int16_t out_sample = float_to_fix(filtered_vol);
 

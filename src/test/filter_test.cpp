@@ -1,4 +1,5 @@
 #include "../lib/filters.h"
+#include "../lib/mode.h"
 
 #include "pico/stdlib.h"
 #include <cstdio>
@@ -25,15 +26,8 @@ int main() {
 
     sleep_ms(5000);
 
-    FilterInstance_t LPF {
-        .filter_name = "LPF",
-        .filter = Filters::FirstOrderIIR::LPF,
-        .x = &x,
-        .y = &y,
-    };
-
     for (uint i = 0; i < N; i++) {
-        float y_i = call_filter(&LPF, 0.15f, i);
+        float y_i = call_filter(Mode::Lowpass, &x, &y, 0.15f, i);
         float expected_y_i = LPF_func(i, 0.15f);
         printf("y_%u = %f\texpected: %f\n", i, y_i, expected_y_i);
     }
