@@ -11,8 +11,8 @@ from PyQt6.QtGui import QColor, QPainter, QPen, QBrush, QPainterPath, QMouseEven
 
 # Protocol constants
 TARGET_FS    = 44100
-CHUNK_PAIRS  = 512          # stereo pairs per binary chunk (~11.6 ms)
-BAUD_RATE    = 115200
+CHUNK_PAIRS  = 256          # stereo pairs per binary chunk (~11.6 ms)
+BAUD_RATE    = 2000000
 CHUNK_MAGIC  = b'\xAA\x55'
 KNOWN_VIDS   = {0x239A, 0x2E8A}
 KNOWN_KW     = ['feather','rp2040','adafruit','circuitpython','tinyusb','pico','raspberry']
@@ -127,7 +127,9 @@ class StreamWorker(QThread):
         try:
             ser = serial.Serial(self.port, BAUD_RATE, timeout=0.1, write_timeout=2)
         except serial.SerialException as e:
-            self.error.emit(str(e)); return
+            # Fall back to 115200 if 2M baud fails
+            self.log_msg.emit(f"[MAP] 2M baud failed, falling back to 115200")
+            ser = serial.Serial(self.port, 115200, timeout=0.1, write_timeout=2)
 
         # Send MODE USB + PLAY
         time.sleep(0.1)
