@@ -142,7 +142,9 @@ void ADC::enableIRQ(bool enable) {
 //bool pin13 = true;
 #include <cstdio>
 void defaultADCRIQHandler() {
-    ADC::readFIFO();
-    //gpio_put(13, pin13);
-    //pin13 = !pin13;
+    // Drain the FIFO completely
+    while (!adc_fifo_is_empty()) {
+        uint16_t value = adc_fifo_get();
+        ADC::getActiveChannel().setRawValue(value);
+    }
 }
