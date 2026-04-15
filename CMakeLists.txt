@@ -60,6 +60,7 @@ target_link_libraries(module_INPUT
     hardware_adc
     hardware_dma
     hardware_irq
+    pico_multicore
 )
 target_include_directories(module_INPUT PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
