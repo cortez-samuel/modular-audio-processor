@@ -1,6 +1,7 @@
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
 #include "hardware/adc.h"
+#include "tusb.h"
 #include "../lib/adc.hpp"
 #include "../lib/I2S.h"
 #include <cstdio>
@@ -8,9 +9,7 @@
 #include <cstring>
 #include <cstdlib>
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Hardware configuration
-// ─────────────────────────────────────────────────────────────────────────────
+// Hardware configuration
 static const uint8_t ADC_CHANNEL_0    = 0;
 static const uint8_t PIN_I2S_Tx_SD    = 0;
 static const uint8_t PIN_I2S_Tx_BCLK  = 2;
@@ -18,50 +17,79 @@ static const uint8_t PIN_I2S_Tx_WS    = 3;
 static const uint    I2S_WS_FRAME_SIZE = 16;
 static const float   FS               = 44100.0f;
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Shared state — written by core1, read by core0
-//  uint8_t/bool reads are atomic on Cortex-M0+
-// ─────────────────────────────────────────────────────────────────────────────
+// Shared state
 enum Mode : uint8_t { MODE_ADC = 0, MODE_USB = 1 };
 
 static volatile Mode    g_mode    = MODE_ADC;
 static volatile bool    g_playing = false;
-static volatile uint8_t g_volume  = 100;  // 0–100
+static volatile uint8_t g_volume  = 100;
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Fixed-point / math helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// ADC → core1 reporting (display only).
+// Using plain volatile variables instead of the hardware inter-core FIFO so
+// that no __sev() is emitted from the audio hot path.  __sev() can wake core1
+// from the WFE inside getchar_timeout_us, which immediately triggers a USB CDC
+// write; the resulting USB bus activity at every 441-sample interval (~10 ms)
+// couples electrical noise back into the ADC input, producing the periodic tap
+// sound and the matching centre-line glitch on the function-module display.
+static volatile uint16_t g_adc_report_val   = 0;
+static volatile bool     g_adc_report_ready = false;
+
+// Audio FIFO - much larger to prevent underruns
+#define AUDIO_FIFO_SIZE 8192
+static int16_t g_audio_fifo_L[AUDIO_FIFO_SIZE];
+static int16_t g_audio_fifo_R[AUDIO_FIFO_SIZE];
+static volatile uint32_t g_fifo_read_idx = 0;
+static volatile uint32_t g_fifo_write_idx = 0;
+static volatile uint32_t g_fifo_count = 0;
+
+static inline bool fifo_push(int16_t L, int16_t R) {
+    if (g_fifo_count >= AUDIO_FIFO_SIZE) {
+        return false;
+    }
+    uint32_t next_write = (g_fifo_write_idx + 1) % AUDIO_FIFO_SIZE;
+    g_audio_fifo_L[g_fifo_write_idx] = L;
+    g_audio_fifo_R[g_fifo_write_idx] = R;
+    g_fifo_write_idx = next_write;
+    __sync_synchronize();
+    g_fifo_count++;
+    return true;
+}
+
+static inline bool fifo_pop(int16_t* L, int16_t* R) {
+    if (g_fifo_count == 0) {
+        *L = 0;
+        *R = 0;
+        return false;
+    }
+    *L = g_audio_fifo_L[g_fifo_read_idx];
+    *R = g_audio_fifo_R[g_fifo_read_idx];
+    g_fifo_read_idx = (g_fifo_read_idx + 1) % AUDIO_FIFO_SIZE;
+    __sync_synchronize();
+    g_fifo_count--;
+    return true;
+}
+
 static inline int16_t float_to_fix(float x) {
-    if (x >=  1.0f) return  0x7FFF;
-    if (x <= -1.0f) return (int16_t)0x8000;
+    if (x >=  1.0f) return  32767;
+    if (x <= -1.0f) return -32768;
     return (int16_t)(x * 32768.0f);
 }
+
 static inline int16_t adc_raw_to_fix(uint16_t raw12) {
-    float s = (raw12 * (3.3f / 4096.0f) - 1.65f) / 1.65f;
-    return float_to_fix(s);
+    // Convert 12-bit ADC to signed 16-bit centered around 0
+    int32_t centered = (int32_t)raw12 - 2048;  // Center around 0 (2048 is ~1.65V)
+    // Scale to 16-bit range
+    int32_t scaled = (centered * 32767) / 2048;
+    return (int16_t)scaled;
 }
+
 static inline int16_t apply_vol(int16_t s, uint8_t v) {
-    if (v == 0)   return 0;
-    if (v == 100) return s;
-    return (int16_t)(((int32_t)s * v) / 100);
+    if (v == 0) return 0;
+    if (v >= 100) return s;
+    return (int16_t)(((int32_t)s * (int32_t)v) / 100);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  SIO FIFO word layout
-//   Audio word : bit31=0, bits[31:16]=Left int16, bits[15:0]=Right int16
-//   ADC report : bit31=1, bits[11:0]=raw 12-bit ADC value
-// ─────────────────────────────────────────────────────────────────────────────
-static inline uint32_t pack_audio(int16_t L, int16_t R) {
-    return ((uint32_t)(uint16_t)L << 16) | (uint16_t)R;
-}
-static inline uint32_t pack_adc_report(uint16_t raw) {
-    return 0x80000000u | (raw & 0xFFFu);
-}
-static inline bool word_is_adc_report(uint32_t w) { return w & 0x80000000u; }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  CORE 0 — real-time I2S loop
-// ─────────────────────────────────────────────────────────────────────────────
+// CORE 0 — real-time I2S loop
 static I2S_Tx* g_i2sTx = nullptr;
 
 static void __attribute__((noreturn)) core0_loop() {
@@ -70,49 +98,45 @@ static void __attribute__((noreturn)) core0_loop() {
 
     while (true) {
         if (g_mode == MODE_ADC) {
-            // ── ADC path ────────────────────────────────────────────────
+            // ADC path - direct monitoring
             if (adc0.newValue()) {
-                uint16_t raw    = adc0.rawValue();
-                int16_t  sample = apply_vol(adc_raw_to_fix(raw), g_volume);
-                uint32_t word   = (uint32_t)(uint16_t)sample;
-
-                // Blocking push to I2S — this IS the real-time deadline
+                uint16_t raw = adc0.rawValue();
+                int16_t sample = apply_vol(adc_raw_to_fix(raw), g_volume);
+                
+                // Send to I2S (mono -> both channels)
                 bool ok = false;
-                while (!ok) { ok = g_i2sTx->queue(word, word); }
-
-                // Throttled ADC report to core1 (~100 Hz)
+                while (!ok) { 
+                    ok = g_i2sTx->queue((uint32_t)(uint16_t)sample, (uint32_t)(uint16_t)sample); 
+                }
+                
+                // Throttled ADC report to core1 (for GUI).
+                // Only write when core1 has consumed the previous value to
+                // avoid clobbering; if core1 is busy the report is simply
+                // skipped — an occasional missed display update is fine.
                 if (++adc_skip >= 441) {
                     adc_skip = 0;
-                    // Non-blocking: if FIFO full we skip this report
-                    multicore_fifo_push_timeout_us(pack_adc_report(raw), 0);
+                    if (!g_adc_report_ready) {
+                        g_adc_report_val   = raw;
+                        g_adc_report_ready = true;
+                    }
                 }
             }
         } else {
-            // ── USB audio path ───────────────────────────────────────────
-            // Drain SIO FIFO words pushed by core1
-            if (multicore_fifo_rvalid()) {
-                uint32_t w = multicore_fifo_pop_blocking();
-                if (!word_is_adc_report(w)) {
-                    int16_t L = (int16_t)(w >> 16);
-                    int16_t R = (int16_t)(w & 0xFFFF);
-                    // Non-blocking I2S queue — drop if full to avoid stalling
-                    g_i2sTx->queue((uint32_t)(uint16_t)L, (uint32_t)(uint16_t)R);
-                }
-            } else {
-                // Underrun: push silence to keep I2S clock alive
-                g_i2sTx->queue(0, 0);
+            // USB audio path - pull from FIFO
+            int16_t L, R;
+            fifo_pop(&L, &R);
+            
+            bool ok = false;
+            while (!ok) { 
+                ok = g_i2sTx->queue((uint32_t)(uint16_t)L, (uint32_t)(uint16_t)R); 
             }
         }
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  CORE 1 — USB CDC I/O, command parser, binary chunk decoder
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Text command buffer
-static char     g_cmd[64];
-static uint8_t  g_cmd_len = 0;
+// CORE 1 — USB CDC I/O
+static char g_cmd[64];
+static uint8_t g_cmd_len = 0;
 
 static void usb_send(const char* s) {
     fputs(s, stdout);
@@ -122,13 +146,19 @@ static void usb_send(const char* s) {
 static void process_cmd(const char* cmd) {
     if (strncmp(cmd, "MODE ADC", 8) == 0) {
         g_playing = false;
-        g_mode    = MODE_ADC;
+        g_mode = MODE_ADC;
+        g_fifo_read_idx = g_fifo_write_idx;
+        g_fifo_count = 0;
         usb_send("OK MODE ADC\n");
     } else if (strncmp(cmd, "MODE USB", 8) == 0) {
         g_mode = MODE_USB;
+        g_fifo_read_idx = g_fifo_write_idx;
+        g_fifo_count = 0;
         usb_send("OK MODE USB\n");
     } else if (strncmp(cmd, "PLAY", 4) == 0) {
         g_playing = true;
+        g_fifo_read_idx = g_fifo_write_idx;
+        g_fifo_count = 0;
         usb_send("OK PLAY\n");
     } else if (strncmp(cmd, "STOP", 4) == 0) {
         g_playing = false;
@@ -137,52 +167,65 @@ static void process_cmd(const char* cmd) {
         int v = atoi(cmd + 4);
         v = (v < 0) ? 0 : (v > 100) ? 100 : v;
         g_volume = (uint8_t)v;
-        char buf[20]; snprintf(buf, sizeof(buf), "OK VOL %d\n", v);
+        char buf[20]; 
+        snprintf(buf, sizeof(buf), "OK VOL %d\n", v);
         usb_send(buf);
     } else if (strncmp(cmd, "STATUS", 6) == 0) {
         char buf[64];
-        snprintf(buf, sizeof(buf), "STATUS MODE:%s VOL:%d PLAY:%d\n",
+        snprintf(buf, sizeof(buf), "STATUS MODE:%s VOL:%d PLAY:%d FIFO:%lu\n",
                  (g_mode == MODE_ADC) ? "ADC" : "USB",
-                 (int)g_volume, (int)g_playing);
+                 (int)g_volume, (int)g_playing, g_fifo_count);
         usb_send(buf);
     }
-    // Unknown commands silently ignored
 }
 
-// Binary chunk decoder state machine
+// Binary chunk decoder - FIXED with correct byte order
 static void __attribute__((noreturn)) core1_entry() {
-    sleep_ms(300);  // Let core0 bring up I2S first
+    sleep_ms(300);
     usb_send("HELLO FEATHER_INPUT_MODULE v2\n");
 
-    // State machine variables
-    uint8_t  sm     = 0;   // 0=m0,1=m1,2=clo,3=chi,4=Llo,5=Lhi,6=Rlo,7=Rhi
-    uint16_t count  = 0;
-    uint8_t  L_lo   = 0;
-    int16_t  L_val  = 0;
-    uint8_t  R_lo   = 0;
+    enum State { 
+        WAIT_MAGIC1, 
+        WAIT_MAGIC2, 
+        COUNT_LO, 
+        COUNT_HI, 
+        L_LO, 
+        L_HI, 
+        R_LO, 
+        R_HI 
+    };
+    
+    State state = WAIT_MAGIC1;
+    uint16_t expected_samples = 0;
+    uint16_t samples_read = 0;
+    uint8_t L_lo = 0, L_hi = 0, R_lo = 0, R_hi = 0;
 
     while (true) {
-        // ── Forward ADC reports (core0→core1) to USB PC ─────────────────
-        // Only in ADC mode; non-blocking check
-        if (g_mode == MODE_ADC && multicore_fifo_rvalid()) {
-            uint32_t w = multicore_fifo_pop_blocking();
-            if (word_is_adc_report(w)) {
+        // USB watchdog
+        if (g_playing && !tud_cdc_connected()) {
+            g_playing = false;
+        }
+
+        // Forward ADC reports ONLY in ADC mode, and ONLY to USB (not to audio)
+        if (g_mode == MODE_ADC) {
+            if (g_adc_report_ready) {
+                uint16_t val       = g_adc_report_val;
+                g_adc_report_ready = false;          // release for next sample
                 char buf[20];
-                snprintf(buf, sizeof(buf), "ADC %u\n", (unsigned)(w & 0xFFFu));
+                snprintf(buf, sizeof(buf), "ADC %u\n", (unsigned)val);
                 usb_send(buf);
             }
         }
 
-        // ── Read one byte from USB CDC ───────────────────────────────────
-        int c = getchar_timeout_us(50);  // 50 µs timeout keeps loop fast
+        int c = getchar_timeout_us(100);
         if (c == PICO_ERROR_TIMEOUT) continue;
 
         uint8_t b = (uint8_t)c;
         bool streaming = (g_mode == MODE_USB && g_playing);
 
         if (!streaming) {
-            // ── Text command mode ────────────────────────────────────────
-            sm = 0;  // Reset binary SM on any non-streaming byte
+            // Text command mode
+            state = WAIT_MAGIC1;
             if (b == '\n' || b == '\r') {
                 if (g_cmd_len > 0) {
                     g_cmd[g_cmd_len] = '\0';
@@ -195,36 +238,88 @@ static void __attribute__((noreturn)) core1_entry() {
             continue;
         }
 
-        // ── Binary chunk state machine ────────────────────────────────────
-        // Runs only when MODE_USB + PLAY
-        switch (sm) {
-            case 0:  sm = (b == 0xAA) ? 1 : 0;                               break;
-            case 1:  sm = (b == 0x55) ? 2 : (b == 0xAA ? 1 : 0);            break;
-            case 2:  count  = b;                       sm = 3;               break;
-            case 3:  count |= ((uint16_t)b << 8);
-                     sm = (count > 0) ? 4 : 0;                               break;
-            case 4:  L_lo = b;                         sm = 5;               break;
-            case 5:  L_val = (int16_t)((uint16_t)L_lo | ((uint16_t)b << 8));
-                     sm = 6;                                                  break;
-            case 6:  R_lo = b;                         sm = 7;               break;
-            case 7: {
-                int16_t R_val = (int16_t)((uint16_t)R_lo | ((uint16_t)b << 8));
+        // Binary chunk decoding - LITTLE-ENDIAN samples
+        switch (state) {
+            case WAIT_MAGIC1:
+                if (b == 0xAA) {
+                    state = WAIT_MAGIC2;
+                }
+                break;
+                
+            case WAIT_MAGIC2:
+                if (b == 0x55) {
+                    state = COUNT_LO;
+                    samples_read = 0;
+                } else if (b == 0xAA) {
+                    state = WAIT_MAGIC2;
+                } else {
+                    state = WAIT_MAGIC1;
+                }
+                break;
+                
+            case COUNT_LO:
+                expected_samples = b;
+                state = COUNT_HI;
+                break;
+                
+            case COUNT_HI:
+                expected_samples |= ((uint16_t)b << 8);
+                if (expected_samples > 0 && expected_samples <= 1024) {
+                    state = L_LO;
+                } else {
+                    state = WAIT_MAGIC1;
+                }
+                break;
+                
+            case L_LO:
+                L_lo = b;
+                state = L_HI;
+                break;
+                
+            case L_HI:
+                L_hi = b;
+                state = R_LO;
+                break;
+                
+            case R_LO:
+                R_lo = b;
+                state = R_HI;
+                break;
+                
+            case R_HI:
+                R_hi = b;
+                
+                // Reconstruct samples - little-endian: low byte first
+                int16_t L_val = (int16_t)((uint16_t)L_lo | ((uint16_t)L_hi << 8));
+                int16_t R_val = (int16_t)((uint16_t)R_lo | ((uint16_t)R_hi << 8));
+                
+                // Apply volume
                 L_val = apply_vol(L_val, g_volume);
                 R_val = apply_vol(R_val, g_volume);
-                // Push to core0 — non-blocking; drop on overflow
-                multicore_fifo_push_timeout_us(pack_audio(L_val, R_val), 0);
-                sm = (--count > 0) ? 4 : 0;
+                
+                // Push to FIFO
+                int timeout = 10000;
+                while (!fifo_push(L_val, R_val) && timeout-- > 0) {
+                    tight_loop_contents();
+                }
+                
+                samples_read++;
+                if (samples_read < expected_samples) {
+                    state = L_LO;
+                } else {
+                    state = WAIT_MAGIC1;
+                }
                 break;
-            }
         }
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  main() — core0
-// ─────────────────────────────────────────────────────────────────────────────
+// main()
 int main() {
     stdio_init_all();
+    gpio_init(29);
+    gpio_set_dir(29, GPIO_OUT);
+    gpio_put(29,1);
 
     // ADC init
     ADC::init(FS, true, false, 1, defaultADCRIQHandler);
@@ -232,19 +327,19 @@ int main() {
     ADC::setActiveChannel(ADC_CHANNEL_0);
     ADC::enableIRQ(true);
 
-    // I2S Tx init — static storage avoids stack issues
+    // I2S Tx init
     static uint32_t Tx_mem[128 * 8];
     static uint32_t Tx_def[128];
-    static I2S_Tx   i2sTx(Tx_mem, Tx_def, 8, 128);
+    static I2S_Tx i2sTx(Tx_mem, Tx_def, 8, 128);
     g_i2sTx = &i2sTx;
     i2sTx.init(PIN_I2S_Tx_BCLK, PIN_I2S_Tx_WS, PIN_I2S_Tx_SD, FS, I2S_WS_FRAME_SIZE);
 
     ADC::run(true);
     i2sTx.enable(true);
 
-    // Launch core1 (USB / commands) — must happen after I2S is up
+    // Launch core1
     multicore_launch_core1(core1_entry);
 
-    // core0 real-time loop — never returns
+    // core0 real-time loop
     core0_loop();
 }
