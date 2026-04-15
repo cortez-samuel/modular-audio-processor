@@ -9,15 +9,16 @@ typedef struct {
     FilterFunc_t filter;
 } Mode_t;
 
-enum class Mode : uint32_t { Pass = 0, Lowpass, Highpass, Gain, FFT };
+enum class Mode : uint32_t { Pass = 0, Lowpass, Highpass, Gain, Quantize, FFT };
 
-static const uint32_t MODES_NUM = 5;
+static const uint32_t MODES_NUM = 6;
 static Mode_t MODES[MODES_NUM] = {
-	{ .name = "SRC",   .filter = Filters::PASS,               },
-	{ .name = "LPF",   .filter = Filters::FirstOrderIIR::LPF, },
-	{ .name = "HPF",   .filter = Filters::FirstOrderIIR::HPF, },
-	{ .name = "GAIN",  .filter = Filters::GAIN,               },
-	{ .name = "FFT",   .filter = Filters::PASS,               },
+	{ .name = "SRC",   .filter = Filters::PASS,     },
+	{ .name = "LPF",   .filter = Filters::LPF,      },
+	{ .name = "HPF",   .filter = Filters::HPF,      },
+	{ .name = "GAIN",  .filter = Filters::GAIN,     },
+	{ .name = "QTZ",   .filter = Filters::QUANTIZE, },
+	{ .name = "FFT",   .filter = Filters::PASS,     },
 };
 
 static inline Mode u32_to_mode(uint32_t i) { return static_cast<Mode>(i); }
