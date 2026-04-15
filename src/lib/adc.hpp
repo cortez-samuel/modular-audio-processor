@@ -56,9 +56,9 @@ public:
 
     uint8_t getChannel() const;
 private:
-    uint16_t m_value;
+    volatile uint16_t m_value;   // written by ADC ISR, read by main loop
     uint8_t m_channel;
-    bool m_newValue;
+    volatile bool m_newValue;    // written by ADC ISR, read by main loop
     bool m_enabled;
 };
 
