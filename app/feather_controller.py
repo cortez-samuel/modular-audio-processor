@@ -1,19 +1,3 @@
-"""
-feather_controller.py — Modular Audio Processor
-Adafruit Feather RP2040 USB-CDC controller
-
-Aesthetic: monochrome Spotify-dark, Courier New, frameless
-Features:  auto-detect, file/USB mode, ADC waveform, seek, loop, volume, log
-
-Requirements:
-    pip install PyQt6 pyserial numpy soundfile scipy
-
-Build portable exe:
-    pyinstaller --onefile --windowed --name FeatherController \
-        --hidden-import soundfile --collect-data soundfile \
-        feather_controller.py
-"""
-
 import sys, os, time, math, struct, threading
 import numpy as np
 import serial
@@ -21,32 +5,19 @@ import serial.tools.list_ports
 import soundfile as sf
 from scipy.signal import resample_poly
 from math import gcd
-
-from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QLabel, QPushButton,
-    QSlider, QFileDialog, QHBoxLayout, QVBoxLayout,
-    QSizePolicy, QTextEdit
-)
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QPushButton, QSlider, QFileDialog, QHBoxLayout, QVBoxLayout, QSizePolicy, QTextEdit
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
-from PyQt6.QtGui import (
-    QColor, QPainter, QPen, QBrush, QPainterPath,
-    QMouseEvent, QFont, QFontDatabase
-)
+from PyQt6.QtGui import QColor, QPainter, QPen, QBrush, QPainterPath, QMouseEvent, QFont, QFontDatabase
 
-# ──────────────────────────────────────────────────────────────────────────────
-#  Protocol constants
-# ──────────────────────────────────────────────────────────────────────────────
+# Protocol constants
 TARGET_FS    = 44100
 CHUNK_PAIRS  = 512          # stereo pairs per binary chunk (~11.6 ms)
 BAUD_RATE    = 115200
 CHUNK_MAGIC  = b'\xAA\x55'
-
 KNOWN_VIDS   = {0x239A, 0x2E8A}
 KNOWN_KW     = ['feather','rp2040','adafruit','circuitpython','tinyusb','pico','raspberry']
 
-# ──────────────────────────────────────────────────────────────────────────────
-#  Audio helpers
-# ──────────────────────────────────────────────────────────────────────────────
+# Audio helpers
 def load_audio(path: str) -> tuple[np.ndarray, float]:
     """Return (stereo_int16 ndarray shape (N,2), duration_sec)."""
     data, fs = sf.read(path, dtype='float32', always_2d=True)
@@ -66,7 +37,6 @@ def load_audio(path: str) -> tuple[np.ndarray, float]:
     s16 = (np.clip(data, -1, 1) * 32767).astype(np.int16)
     return s16, len(s16) / TARGET_FS
 
-
 def build_peaks(samples: np.ndarray, n: int = 300) -> np.ndarray:
     """Downsample to n peak values (mono mix, 0..1)."""
     total = len(samples)
@@ -79,7 +49,6 @@ def build_peaks(samples: np.ndarray, n: int = 300) -> np.ndarray:
         out[i] = np.max(np.abs(samples[s:e])) / 32767.0
     return out
 
-
 def make_chunk(pairs_i16: np.ndarray) -> bytes:
     """Build binary chunk: magic(2) + count(2LE) + samples(N*4)."""
     n = len(pairs_i16)
@@ -87,10 +56,7 @@ def make_chunk(pairs_i16: np.ndarray) -> bytes:
     body = pairs_i16.astype('<i2').tobytes()
     return hdr + body
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-#  Port scanner thread
-# ──────────────────────────────────────────────────────────────────────────────
+# Port scanner thread
 def _is_rp2040(p) -> bool:
     desc = (p.description  or '').lower()
     mfr  = (p.manufacturer or '').lower()
@@ -98,7 +64,6 @@ def _is_rp2040(p) -> bool:
     if p.vid in KNOWN_VIDS:
         return True
     return any(kw in desc or kw in mfr or kw in hwid for kw in KNOWN_KW)
-
 
 class PortScanner(QThread):
     device_found = pyqtSignal(str, str)   # port, description
@@ -133,10 +98,7 @@ class PortScanner(QThread):
     def stop(self):
         self._stop.set()
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-#  Stream worker thread
-# ──────────────────────────────────────────────────────────────────────────────
+# Stream worker thread
 class StreamWorker(QThread):
     position_changed = pyqtSignal(int)   # absolute sample index
     finished         = pyqtSignal()
@@ -179,6 +141,37 @@ class StreamWorker(QThread):
         chunk = CHUNK_PAIRS
         chunk_dur = chunk / TARGET_FS
 
+        # ── Pre-fill phase ──────────────────────────────────────────────────
+        # The RP2040 firmware has an 8192-sample audio FIFO.  Send enough
+        # chunks to fill it before starting paced delivery; this gives the
+        # device a comfortable cushion so playback never starves during the
+        # brief moment between the first write and the steady-state loop.
+        FIFO_SAMPLES   = 8192
+        PREFILL_CHUNKS = FIFO_SAMPLES // chunk          # = 16 for CHUNK_PAIRS=512
+        for _ in range(PREFILL_CHUNKS):
+            if self._stop.is_set() or idx >= total:
+                break
+            end  = min(idx + chunk, total)
+            data = self.samples[idx:end].copy()
+            if self.volume < 1.0:
+                data = (data.astype(np.int32) * int(self.volume * 256) >> 8).clip(
+                    -32768, 32767).astype(np.int16)
+            try:
+                ser.write(make_chunk(data)); ser.flush()
+            except serial.SerialException as e:
+                self.error.emit(str(e)); return
+            idx = end
+
+        # ── Paced delivery phase ─────────────────────────────────────────────
+        # Use a monotonic deadline so each chunk is sent at a fixed wall-clock
+        # interval regardless of sleep jitter or system load.  Targeting 90 %
+        # of chunk_dur keeps us slightly ahead of real time; the RP2040's FIFO
+        # absorbs the small surplus, and natural USB flow-control takes over once
+        # the FIFO is full.  The old `time.sleep(chunk_dur * 0.85)` approach
+        # caused underruns because Python's sleep can overshoot by 10-15 ms on
+        # most OSes, which is larger than the 1.7 ms margin that 0.85× leaves.
+        deadline = time.monotonic()
+
         while not self._stop.is_set():
             self._pause.wait()
             if self._stop.is_set(): break
@@ -199,15 +192,12 @@ class StreamWorker(QThread):
             if self.volume < 1.0:
                 data = (data.astype(np.int32) * int(self.volume * 256) >> 8).clip(
                     -32768, 32767).astype(np.int16)
-
             try:
                 ser.write(make_chunk(data)); ser.flush()
             except serial.SerialException as e:
                 self.error.emit(str(e)); break
-
             idx = end
             self.position_changed.emit(idx)
-
             if idx >= total:
                 if self.loop:
                     idx = 0
@@ -215,7 +205,17 @@ class StreamWorker(QThread):
                 else:
                     break
 
-            time.sleep(chunk_dur * 0.85)
+            # Advance the deadline by 90 % of a chunk's duration and sleep
+            # until we reach it.  Skip the sleep if we're already late, and
+            # reset the deadline if we've drifted more than one full chunk
+            # behind (e.g. after a long pause) to avoid a burst catch-up.
+            deadline += chunk_dur * 0.90
+            now       = time.monotonic()
+            remaining = deadline - now
+            if remaining > 0.001:
+                time.sleep(remaining)
+            elif remaining < -chunk_dur:
+                deadline = time.monotonic()   # clock skew reset
 
         try:
             ser.write(b"STOP\n"); ser.flush()
@@ -226,10 +226,7 @@ class StreamWorker(QThread):
         self.log_msg.emit("[MAP] Stream ended.")
         self.finished.emit()
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-#  Serial reader thread (for ADC data and responses when not streaming)
-# ──────────────────────────────────────────────────────────────────────────────
+# Serial reader thread (for ADC data and responses when not streaming)
 class SerialReader(QThread):
     adc_sample = pyqtSignal(int)    # raw 12-bit ADC value
     log_msg    = pyqtSignal(str)
@@ -247,8 +244,20 @@ class SerialReader(QThread):
         except Exception as e:
             self.log_msg.emit(f"[READER] Open error: {e}"); return
 
+        # Give the CDC link time to stabilise (same pattern as StreamWorker).
+        # Then send STOP before MODE ADC: if the RP2040 was left in streaming
+        # mode by a previous session that closed without a clean shutdown, the
+        # binary state-machine intercepts all bytes and text commands never
+        # reach process_cmd().  Sending STOP first exits that state when the
+        # device is already in text mode; the RP2040-side watchdog (which
+        # clears g_playing on USB disconnect) handles the stuck case on
+        # reconnect so that MODE ADC is always received as a text command.
+        time.sleep(0.1)
+        ser.reset_input_buffer()
+        ser.write(b"\nSTOP\n"); ser.flush()
+        time.sleep(0.05)
+        ser.reset_input_buffer()
         ser.write(b"MODE ADC\n"); ser.flush()
-
         while not self._stop.is_set():
             try:
                 line = ser.readline().decode('ascii', errors='replace').strip()
@@ -266,9 +275,7 @@ class SerialReader(QThread):
         except Exception: pass
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-#  Waveform / oscilloscope widget
-# ──────────────────────────────────────────────────────────────────────────────
+# Waveform / oscilloscope widget
 class WaveformWidget(QWidget):
     seek_requested = pyqtSignal(float)  # 0.0–1.0
 
@@ -333,7 +340,7 @@ class WaveformWidget(QWidget):
             self._draw_oscilloscope(p, w, h, mid)
             p.end(); return
 
-        # ── File waveform ──
+        # File waveform
         if self._peaks is None or len(self._peaks) == 0:
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(QColor(25, 25, 25))
@@ -383,10 +390,7 @@ class WaveformWidget(QWidget):
         p.setFont(QFont("Courier New", 7))
         p.drawText(6, 14, "ADC LIVE")
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-#  Animated play button (matches reference)
-# ──────────────────────────────────────────────────────────────────────────────
+# Animated play button (matches reference)
 class PlayButton(QWidget):
     clicked = pyqtSignal()
 
@@ -444,10 +448,7 @@ class PlayButton(QWidget):
             p.drawPath(path)
         p.end()
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-#  Pulsing device indicator dot
-# ──────────────────────────────────────────────────────────────────────────────
+# Pulsing device indicator dot
 class DeviceDot(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -479,10 +480,7 @@ class DeviceDot(QWidget):
         p.drawEllipse(0, 0, 10, 10)
         p.end()
 
-
-# ──────────────────────────────────────────────────────────────────────────────
 #  Main Window
-# ──────────────────────────────────────────────────────────────────────────────
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -501,29 +499,24 @@ class MainWindow(QMainWindow):
         self._stream_off : int               = 0   # offset into samples
         self._drag_pos                       = None
         self._scan_throttle                  = 0
-
         self._build_ui()
         self._apply_style()
-
         self._scanner = PortScanner()
         self._scanner.device_found.connect(self._on_device_found)
         self._scanner.device_lost.connect(self._on_device_lost)
         self._scanner.scan_result.connect(self._on_scan_result)
         self._scanner.start()
-
         self._ui_timer = QTimer()
         self._ui_timer.timeout.connect(self._tick_ui)
         self._ui_timer.start(100)
-
         self._log("[MAP] Modular Audio Processor started")
         self._log("[MAP] Scanning for RP2040 USB-CDC device …")
 
-    # ── UI layout ──────────────────────────────────────────────────────────────
+    # UI Layout
     def _build_ui(self):
         root = QWidget(self)
         root.setObjectName("root")
         self.setCentralWidget(root)
-
         outer = QVBoxLayout(root)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -548,11 +541,11 @@ class MainWindow(QMainWindow):
         # Mode toggle
         mode_row = QHBoxLayout(); mode_row.setSpacing(6)
         lbl_m = QLabel("INPUT SOURCE"); lbl_m.setObjectName("sectionLabel")
-        self._btn_mode_usb = QPushButton("FILE / USB")
+        self._btn_mode_usb = QPushButton("DIGITAL")
         self._btn_mode_usb.setObjectName("btnModeActive")
         self._btn_mode_usb.setCheckable(True); self._btn_mode_usb.setChecked(True)
         self._btn_mode_usb.clicked.connect(lambda: self._set_mode('USB'))
-        self._btn_mode_adc = QPushButton("ADC INPUT")
+        self._btn_mode_adc = QPushButton("ANALOG")
         self._btn_mode_adc.setObjectName("btnModeInactive")
         self._btn_mode_adc.setCheckable(True)
         self._btn_mode_adc.clicked.connect(lambda: self._set_mode('ADC'))
@@ -612,7 +605,6 @@ class MainWindow(QMainWindow):
         self._debug.setReadOnly(True)
         self._debug.setFixedHeight(120)
         self._debug.setFont(QFont("Courier New", 8))
-
         bl.addLayout(mode_row)
         bl.addLayout(info_row)
         bl.addWidget(self._wave)
@@ -621,7 +613,6 @@ class MainWindow(QMainWindow):
         bl.addWidget(self._lbl_status)
         bl.addWidget(lbl_debug)
         bl.addWidget(self._debug)
-
         outer.addWidget(tb)
         outer.addWidget(body, 1)
 
@@ -632,8 +623,7 @@ class MainWindow(QMainWindow):
 
     def _apply_style(self):
         self.setStyleSheet("""
-            QWidget#root {
-                background: #000000;
+            QWidget#root {background: #000000;
                 border: 1px solid #222222;
                 border-radius: 10px;
             }
@@ -644,63 +634,23 @@ class MainWindow(QMainWindow):
                 border-bottom: 1px solid #1a1a1a;
             }
             QWidget#body { background: transparent; }
-
-            QLabel#appTitle {
-                font-family: 'Courier New', monospace;
-                font-size: 15px; font-weight: bold;
-                letter-spacing: 5px; color: #ffffff;
-            }
-            QLabel#portLabel {
-                font-family: 'Courier New', monospace;
-                font-size: 5px; color: #444444;
-            }
-            QLabel#sectionLabel {
-                font-family: 'Courier New', monospace;
-                font-size: 12px; letter-spacing: 3px; color: #444444;
-            }
-            QLabel#trackTitle {
-                font-family: 'Courier New', monospace;
-                font-size: 15px; font-weight: bold; color: #ffffff;
-            }
-            QLabel#monoLabel {
-                font-family: 'Courier New', monospace;
-                font-size: 20px; color: #666666;
-            }
-            QLabel#monoSmall {
-                font-family: 'Courier New', monospace;
-                font-size: 15px; letter-spacing: 2px; color: #444444;
-            }
-            QLabel#statusLabel {
-                font-family: 'Courier New', monospace;
-                font-size: 15px; letter-spacing: 1px; color: #444444;
-            }
-            QLabel#debugHeader {
-                font-family: 'Courier New', monospace;
-                font-size: 14px; letter-spacing: 3px; color: #2a2a2a;
-            }
-
-            QPushButton#btnClose {
-                background: transparent; color: #333333;
-                border: none; font-size: 12px;
-            }
-            QPushButton#btnClose:hover { color: #ffffff; }
-
-            QPushButton#btnModeActive, QPushButton#btnModeInactive {
-                font-family: 'Courier New', monospace;
-                font-size: 9px; letter-spacing: 2px;
-                border-radius: 3px; padding: 5px 14px;
-                border: 1px solid #2a2a2a;
-            }
+            QLabel#appTitle {font-family: 'Courier New', monospace; font-size: 15px; font-weight: bold; letter-spacing: 5px; color: #ffffff;}
+            QLabel#portLabel {font-family: 'Courier New', monospace; font-size: 5px; color: #444444;}
+            QLabel#sectionLabel {font-family: 'Courier New', monospace; font-size: 12px; letter-spacing: 3px; color: #444444;}
+            QLabel#trackTitle {font-family: 'Courier New', monospace; font-size: 15px; font-weight: bold; color: #ffffff;}
+            QLabel#monoLabel {font-family: 'Courier New', monospace; font-size: 20px; color: #666666;}
+            QLabel#monoSmall {font-family: 'Courier New', monospace; font-size: 15px; letter-spacing: 2px; color: #444444;}
+            QLabel#statusLabel {font-family: 'Courier New', monospace; font-size: 15px; letter-spacing: 1px; color: #444444;}
+            QLabel#debugHeader {font-family: 'Courier New', monospace; font-size: 14px; letter-spacing: 3px; color: #2a2a2a;}
+            QPushButton#btnClose {background: transparent; color: #333333; border: none; font-size: 12px;}
+            QPushButton#btnClose:hover {color: #ffffff; }
+            QPushButton#btnModeActive, QPushButton#btnModeInactive {font-family: 'Courier New', monospace; font-size: 9px; letter-spacing: 2px; border-radius: 3px; padding: 5px 14px; border: 1px solid #2a2a2a;}
             QPushButton#btnModeActive:checked,
-            QPushButton#btnModeInactive:checked {
-                background: #ffffff; color: #000000; border-color: #ffffff;
-            }
+            QPushButton#btnModeInactive:checked {background: #ffffff; color: #000000; border-color: #ffffff;}
             QPushButton#btnModeActive:!checked,
-            QPushButton#btnModeInactive:!checked {
-                background: #0a0a0a; color: #444444;
-            }
+            QPushButton#btnModeInactive:!checked {background: #0a0a0a; color: #444444;}
             QPushButton#btnModeActive:hover:!checked,
-            QPushButton#btnModeInactive:hover:!checked { color: #aaaaaa; }
+            QPushButton#btnModeInactive:hover:!checked {color: #aaaaaa; }
 
             QPushButton#btnPrimary {
                 background: #ffffff; color: #000000;
@@ -745,7 +695,7 @@ class MainWindow(QMainWindow):
             }
         """)
 
-    # ── Drag / move ────────────────────────────────────────────────────────────
+    # Drag / move
     def _tb_press(self, e: QMouseEvent):
         if e.button() == Qt.MouseButton.LeftButton:
             self._drag_pos = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
@@ -754,14 +704,14 @@ class MainWindow(QMainWindow):
         if self._drag_pos and e.buttons() & Qt.MouseButton.LeftButton:
             self.move(e.globalPosition().toPoint() - self._drag_pos)
 
-    # ── Logging ────────────────────────────────────────────────────────────────
+    # Logging
     def _log(self, msg: str):
         ts = time.strftime("%H:%M:%S")
         self._debug.append(f"{ts}  {msg}")
         sb = self._debug.verticalScrollBar()
         sb.setValue(sb.maximum())
 
-    # ── Device events ──────────────────────────────────────────────────────────
+    # Device events
     def _on_scan_result(self, ports: list):
         self._scan_throttle += 1
         if self._scan_throttle % 8 == 1:
@@ -789,7 +739,7 @@ class MainWindow(QMainWindow):
         self._log("[MAP] RP2040 disconnected")
         self._stop_all_workers()
 
-    # ── Mode switching ─────────────────────────────────────────────────────────
+    # Mode switching
     def _set_mode(self, m: str):
         if m == self._mode:
             return
@@ -803,10 +753,8 @@ class MainWindow(QMainWindow):
         self._btn_mode_usb.setObjectName("btnModeActive" if usb_active else "btnModeInactive")
         self._btn_mode_adc.setObjectName("btnModeActive" if not usb_active else "btnModeInactive")
         self._apply_style()
-
         self._wave.set_mode(m)
         self._log(f"[MAP] Mode → {m}")
-
         if m == 'ADC':
             self._lbl_status.setText("ADC mode — monitoring input")
             if self._port:
@@ -814,7 +762,7 @@ class MainWindow(QMainWindow):
         else:
             self._lbl_status.setText("USB mode — ready to stream")
 
-    # ── ADC reader management ──────────────────────────────────────────────────
+    # ADC reader management
     def _start_adc_reader(self):
         if self._reader and self._reader.isRunning():
             return
@@ -836,7 +784,7 @@ class MainWindow(QMainWindow):
         self._stop()
         self._stop_adc_reader()
 
-    # ── File loading ───────────────────────────────────────────────────────────
+    # File loading
     def _open_file(self):
         path, _ = QFileDialog.getOpenFileName(
             self, "Open Audio File", "",
@@ -862,7 +810,7 @@ class MainWindow(QMainWindow):
             self._lbl_status.setText(f"Load error: {ex}")
             self._log(f"[MAP] Load error: {ex}")
 
-    # ── Transport ──────────────────────────────────────────────────────────────
+    # Transport
     def _toggle_play(self):
         if self._worker and self._worker.isRunning():
             if self._play_btn._playing:
@@ -911,7 +859,7 @@ class MainWindow(QMainWindow):
         self._lbl_elapsed.setText("0:00")
         self._lbl_status.setText("Stopped")
 
-    # ── Seek ───────────────────────────────────────────────────────────────────
+    # Seek
     def _on_seek(self, ratio: float):
         if self._samples is None: return
         target      = int(ratio * len(self._samples))
@@ -930,18 +878,22 @@ class MainWindow(QMainWindow):
             m, s = divmod(int(target / TARGET_FS), 60)
             self._lbl_elapsed.setText(f"{m}:{s:02d}")
 
-    # ── Volume ─────────────────────────────────────────────────────────────────
+    # Volume
     def _on_volume(self, val: int):
         if self._worker:
             self._worker.set_volume(val / 100.0)
 
-    # ── Position callback ──────────────────────────────────────────────────────
+    # Position callback
     def _on_position(self, idx: int):
         if self._samples is None: return
-        real  = self._stream_off + idx
-        ratio = min(real / max(len(self._samples), 1), 1.0)
+        # idx is already the absolute sample index within self._samples
+        # (StreamWorker emits it as `end`, which starts from start_idx and
+        # increments toward total).  Adding _stream_off here was wrong: it
+        # double-counted the seek offset, making elapsed time and the progress
+        # playhead jump ahead by the full seek position on every update.
+        ratio = min(idx / max(len(self._samples), 1), 1.0)
         self._wave.set_progress(ratio)
-        m, s = divmod(int(real / TARGET_FS), 60)
+        m, s = divmod(int(idx / TARGET_FS), 60)
         self._lbl_elapsed.setText(f"{m}:{s:02d}")
 
     def _on_finished(self):
@@ -954,18 +906,17 @@ class MainWindow(QMainWindow):
         self._lbl_status.setText(f"Error: {msg}")
         self._log(f"[MAP] Error: {msg}")
 
-    # ── UI tick ────────────────────────────────────────────────────────────────
+    # UI tick
     def _tick_ui(self):
         if self._worker:
             self._worker.set_loop(self._btn_loop.isChecked())
 
-    # ── Close ──────────────────────────────────────────────────────────────────
+    # Close
     def closeEvent(self, e):
         self._stop_all_workers()
         self._scanner.stop()
         self._scanner.wait(2000)
         super().closeEvent(e)
-
 
 def main():
     app = QApplication(sys.argv)
