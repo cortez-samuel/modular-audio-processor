@@ -92,15 +92,25 @@ static inline int16_t apply_vol(int16_t s, uint8_t v) {
 // CORE 0 — real-time I2S loop
 static I2S_Tx* g_i2sTx = nullptr;
 
+// input.cpp - Replace core0_loop function
 static void __attribute__((noreturn)) core0_loop() {
     ADC& adc0 = ADC::getActiveChannel();
     uint32_t adc_skip = 0;
-
+    
+    // For ADC mode, we'll manually sample at ~44.1kHz
+    uint64_t next_sample_time = time_us_64();
+    const uint32_t SAMPLE_INTERVAL_US = 1000000 / FS;  // ~22.67 us
+    
     while (true) {
         if (g_mode == MODE_ADC) {
-            // ADC path - direct monitoring
-            if (adc0.newValue()) {
-                uint16_t raw = adc0.rawValue();
+            // ADC path - direct monitoring with precise timing
+            uint64_t now = time_us_64();
+            if (now >= next_sample_time) {
+                next_sample_time += SAMPLE_INTERVAL_US;
+                
+                // Read ADC directly (not using FIFO/IRQ to avoid glitches)
+                adc_select_input(ADC_CHANNEL_0);
+                uint16_t raw = adc_read();
                 int16_t sample = apply_vol(adc_raw_to_fix(raw), g_volume);
                 
                 // Send to I2S (mono -> both channels)
@@ -109,27 +119,38 @@ static void __attribute__((noreturn)) core0_loop() {
                     ok = g_i2sTx->queue((uint32_t)(uint16_t)sample, (uint32_t)(uint16_t)sample); 
                 }
                 
-                // Throttled ADC report to core1 (for GUI).
-                // Only write when core1 has consumed the previous value to
-                // avoid clobbering; if core1 is busy the report is simply
-                // skipped — an occasional missed display update is fine.
+                // Throttled ADC report to core1 (for GUI)
                 if (++adc_skip >= 441) {
                     adc_skip = 0;
                     if (!g_adc_report_ready) {
-                        g_adc_report_val   = raw;
+                        g_adc_report_val = raw;
                         g_adc_report_ready = true;
                     }
+                }
+                
+                // If we're falling behind, reset the timer
+                now = time_us_64();
+                if (now > next_sample_time + SAMPLE_INTERVAL_US * 2) {
+                    next_sample_time = now;
                 }
             }
         } else {
             // USB audio path - pull from FIFO
             int16_t L, R;
-            fifo_pop(&L, &R);
-            
-            bool ok = false;
-            while (!ok) { 
-                ok = g_i2sTx->queue((uint32_t)(uint16_t)L, (uint32_t)(uint16_t)R); 
+            if (fifo_pop(&L, &R)) {
+                bool ok = false;
+                while (!ok) { 
+                    ok = g_i2sTx->queue((uint32_t)(uint16_t)L, (uint32_t)(uint16_t)R); 
+                }
+            } else {
+                // No data available, output silence to prevent underrun artifacts
+                bool ok = false;
+                while (!ok) {
+                    ok = g_i2sTx->queue(0, 0);
+                }
             }
+            // Reset next_sample_time for when we switch back to ADC mode
+            next_sample_time = time_us_64();
         }
     }
 }
@@ -183,7 +204,7 @@ static void process_cmd(const char* cmd) {
 static void __attribute__((noreturn)) core1_entry() {
     sleep_ms(300);
     usb_send("HELLO FEATHER_INPUT_MODULE v2\n");
-
+    stdio_set_translate_crlf(&stdio_usb, false);
     enum State { 
         WAIT_MAGIC1, 
         WAIT_MAGIC2, 
@@ -297,10 +318,12 @@ static void __attribute__((noreturn)) core1_entry() {
                 L_val = apply_vol(L_val, g_volume);
                 R_val = apply_vol(R_val, g_volume);
                 
-                // Push to FIFO
-                int timeout = 10000;
-                while (!fifo_push(L_val, R_val) && timeout-- > 0) {
-                    tight_loop_contents();
+                // Push to FIFO with minimal blocking
+                // If FIFO is full, we skip this sample rather than blocking
+                // This prevents USB buffer overflow
+                if (!fifo_push(L_val, R_val)) {
+                    // FIFO full - this is expected occasionally during startup
+                    // We don't want to block USB reception
                 }
                 
                 samples_read++;
@@ -321,25 +344,27 @@ int main() {
     gpio_set_dir(29, GPIO_OUT);
     gpio_put(29,1);
 
-    // ADC init
-    ADC::init(FS, true, false, 1, defaultADCRIQHandler);
+    // ADC init - FIX: disable FIFO for continuous sampling without DMA
+    // The ADC will be sampled continuously at ~44.1kHz via the free-running mode
+    ADC::init(FS, false, false, 1, defaultADCRIQHandler);  // FIFO disabled
     ADC::enableChannel(ADC_CHANNEL_0, true);
     ADC::setActiveChannel(ADC_CHANNEL_0);
-    ADC::enableIRQ(true);
-
+    ADC::enableIRQ(false);  // Disable FIFO IRQ - we'll use round-robin sampling
+    
     // I2S Tx init
     static uint32_t Tx_mem[128 * 8];
     static uint32_t Tx_def[128];
     static I2S_Tx i2sTx(Tx_mem, Tx_def, 8, 128);
     g_i2sTx = &i2sTx;
     i2sTx.init(PIN_I2S_Tx_BCLK, PIN_I2S_Tx_WS, PIN_I2S_Tx_SD, FS, I2S_WS_FRAME_SIZE);
-
-    ADC::run(true);
+    
+    // Don't call ADC::run() - we'll manually sample in the loop
+    
     i2sTx.enable(true);
-
+    
     // Launch core1
     multicore_launch_core1(core1_entry);
-
+    
     // core0 real-time loop
     core0_loop();
 }
