@@ -1,3 +1,79 @@
+# Modular Audio Processor (Production Release)
+
+## Overview
+A real-time audio effects processor built on the Adafruit Feather RP2040. It processes I2S digital audio through various filters (Low-pass, High-pass, Gain, Quantize) and provides a live waveform/FFT visualization on an SSD1306 OLED display.
+
+## Architecture
+The system utilizes a multi-core architecture to ensure real-time audio processing performance.
+
+- **Core 0 (Real-time Audio):**
+    - Manages I2S Rx/Tx PIO state machines and DMA channels (`I2S.cpp`, `TxPingPong.cpp`).
+    - Processes audio samples using floating-point filters (`filters.cpp`).
+    - Maintains cyclic buffers for filter history (`CyclicBuffer_t`).
+- **Core 1 (UI & Control):**
+    - Renders the OLED display (`oled.cpp`), switching between Waveform and FFT views.
+    - Handles user input via rotary encoders and push buttons (`RotaryEncoder.hpp`, `PushButton.hpp`).
+    - Manages non-volatile storage of settings in flash memory.
+- **Inter-Core Communication:**
+    - A FIFO queue (`sharedQueue`) passes downsampled audio data from Core 0 to Core 1 for visualization without locking.
+
+## Features
+- **Audio Effects:**
+    - **SRC:** Pass-through
+    - **LPF/HPF:** First-order IIR filters with adjustable cutoff (`alpha`)
+    - **GAIN:** Quadratic gain scaling
+    - **QTZ:** Bit-crusher/Quantizer effect
+- **Visualization:**
+    - Real-time Oscilloscope
+    - Real-time FFT Spectrum Visualizer (256 bins)
+- **Persistence:** Saves current Mode and Alpha value to flash memory. It automatically restores on next power-up.
+
+## Hardware Components
+- Microcontroller: Adafruit Feather RP2040
+- Display: SSD1306 OLED (128x64)
+- Audio Codec: PCM5102 DAC Decoder Module and Mini Loudspeaker (3 Watt, 4 Ohm)
+- Input: 2x CYT1100 Rotary Encoders with Push Switch
+
+## Pinout
+| Component       | Pin Function | GPIO Pin |
+|-----------------|--------------|----------|
+| **OLED Display**| SCK          | 10       |
+|                 | MOSI (TX)    | 11       |
+|                 | RST          | 28       |
+|                 | DC           | 29       |
+|                 | CS           | 24       |
+| **I2S Audio**   | Tx Data      | 0        |
+|                 | Tx BCLK      | 2        |
+|                 | Tx WS (LRCLK)| 3        |
+|                 | Rx Data      | 7        |
+|                 | Rx BCLK      | 8        |
+|                 | Rx WS (LRCLK)| 9        |
+| **Controls**    | Mode Enc A   | 12       |
+|                 | Mode Enc B   | 13       |
+|                 | Mode SW      | 25       |
+|                 | Alpha Enc A  | 1        |
+|                 | Alpha Enc B  | 6        |
+|                 | Alpha SW     | 20       |
+
+## Build Instructions
+1. Install the Raspberry Pi Pico SDK
+2. Clone this repository
+3. Create a `build` directory: `mkdir build && cd build`
+4. Run CMake: `cmake ..`
+5. Compile: `make`
+6. Flash the `.uf2` file to the RP2040
+
+## Usage
+- **Mode Selection:** Turn the *Left* encoder to cycle between effects (SRC, LPF, HPF, GAIN, QTZ, FFT). Press the *Left* encoder button to reset to SRC mode.
+- **Parameter Adjustment:** Turn the *Right* encoder to adjust the filter parameter (`alpha`). Press the *Right* encoder button to reset the parameter to `1.00` (or max).
+- **Visualization:** The display will automatically show the waveform or FFT based on the selected mode.
+- **Saving:** Settings are saved automatically after the last change.
+
+## Known Bugs
+- When continuously changing the alpha value when there is an incoming signal, both the display and audio output pause very briefly. This is because saving the flash memory operates within an ISR, which briefly stops the rest of the program to complete the flash write. We were not able to implement a solution to this as the ISR is needed to prevent reading and writing at the same time, which caused the system to crash during testing.
+
+---
+
 # Modular Audio Processor (Release Candidate)
 
 ## Overview
